@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Open Fiber Map</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f6f8; color: #212121; min-height: 100vh; }
+
+  #topbar {
+    background: #1565c0; color: white; padding: 0 20px;
+    display: flex; align-items: center; gap: 14px; height: 48px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  }
+  #topbar button.back-btn {
+    color: rgba(255,255,255,.8); background: none; border: none; cursor: pointer;
+    font-size: 13px; padding: 0;
+  }
+  #topbar button.back-btn:hover { color: white; }
+  #topbar .sep { opacity: .4; }
+  #topbar .title { font-size: 16px; font-weight: 600; }
+
+  #tabs {
+    background: white; border-bottom: 1px solid #e0e0e0;
+    display: flex; padding: 0 20px;
+  }
+  .admin-tab {
+    padding: 12px 20px; border: none; border-bottom: 3px solid transparent;
+    background: none; cursor: pointer; font-size: 13px; color: #555; font-weight: 500;
+  }
+  .admin-tab:hover { color: #1565c0; }
+  .admin-tab.active { border-bottom-color: #1565c0; color: #1565c0; font-weight: 600; }
+
+  #tab-content { padding: 28px; max-width: 760px; }
+
+  .card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px 24px; margin-bottom: 18px; }
+  .card h3 { font-size: 13px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 16px; }
+
+  table.user-table { width: 100%; border-collapse: collapse; }
+  table.user-table th, table.user-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+  table.user-table th { background: #fafafa; font-weight: 600; font-size: 12px; color: #666; }
+
+  .field-badge { display:inline-block; padding:2px 7px; border-radius:10px; font-size:11px; font-weight:600; }
+  .field-badge.pole { background:#e8f5e9; color:#2e7d32; }
+  .field-badge.closure { background:#e3f2fd; color:#1565c0; }
+  .field-badge.route { background:#fff3e0; color:#e65100; }
+  .field-badge.site { background:#f3e5f5; color:#6a1b9a; }
+  .field-badge.equipment { background:#fce4ec; color:#880e4f; }
+
+  label { display: block; font-size: 12px; color: #666; margin: 10px 0 4px; }
+  label:first-of-type { margin-top: 0; }
+  input, select, textarea {
+    width: 100%; padding: 7px 10px; font-size: 13px;
+    border: 1px solid #ccc; border-radius: 5px; background: white;
+  }
+  .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+  .btn-row button { padding: 8px 16px; font-size: 13px; border-radius: 5px; cursor: pointer; border: 1px solid #ccc; background: white; }
+  .btn-row button.primary { background: #1565c0; color: white; border-color: #1565c0; }
+
+  .icon-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 4px; }
+  .icon-btn:hover { background: #f5f5f5; }
+
+  #loading { text-align: center; padding: 80px 24px; color: #999; }
+
+  /* Dark mode */
+  body.dark-mode { background: #111827; color: #f3f4f6; }
+  body.dark-mode .card { background: #1f2937; border-color: #374151; }
+  body.dark-mode .card h3 { color: #6b7280; }
+  body.dark-mode #tabs { background: #1f2937; border-bottom-color: #374151; }
+  body.dark-mode .admin-tab { color: #9ca3af; }
+  body.dark-mode .admin-tab:hover { color: #f3f4f6; background: #374151; }
+  body.dark-mode .admin-tab.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+  body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background: #111827; border-color: #374151; color: #f3f4f6; }
+  body.dark-mode label { color: #9ca3af; }
+  body.dark-mode table.user-table th { background: #374151; color: #9ca3af; border-bottom-color: #4b5563; }
+  body.dark-mode table.user-table td { border-bottom-color: #374151; color: #d1d5db; }
+  body.dark-mode table.user-table tr:hover td { background: #374151; }
+  body.dark-mode .btn-row button:not(.primary) { background: #374151; border-color: #4b5563; color: #d1d5db; }
+  body.dark-mode .icon-btn { color: #9ca3af; }
+  body.dark-mode .icon-btn:hover { background: #374151; }
+</style>
+</head>
+<body>
+<script>if(localStorage.getItem('ofm-dark-mode')==='true')document.body.classList.add('dark-mode');</script>
+
+<div id="loading">Loading…</div>
+
+<div id="app" style="display:none;">
+  <div id="topbar">
+    <button class="back-btn" onclick="goBackToMap()">← Map</button>
+    <span class="sep">/</span>
+    <span class="title">Admin</span>
+  </div>
+
+  <div id="tabs">
+    <button class="admin-tab active" data-tab="users" onclick="switchTab('users')">Users</button>
+    <button class="admin-tab" data-tab="fields" onclick="switchTab('fields')">Custom Fields</button>
+    <button class="admin-tab" data-tab="connectors" onclick="switchTab('connectors')">Connectors</button>
+    <button class="admin-tab" data-tab="equipment" onclick="switchTab('equipment')">Equipment</button>
+  </div>
+
+  <div id="tab-content">
+    <div id="tab-users">
+      <div class="card">
+        <h3>Users</h3>
+        <div id="users-list"></div>
+      </div>
+      <div class="card">
+        <h3>Add New User</h3>
+        <label>Username</label><input id="nu-name">
+        <label>Full Name</label><input id="nu-full">
+        <label>Password</label><input id="nu-pw" type="password">
+        <label>Role</label>
+        <select id="nu-role">
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+        <div class="btn-row"><button class="primary" onclick="addUser()">Create User</button></div>
+      </div>
+    </div>
+
+    <div id="tab-fields" style="display:none;">
+      <div class="card">
+        <h3>Custom Fields</h3>
+        <div id="fields-list"></div>
+      </div>
+      <div class="card">
+        <h3>Add Custom Field</h3>
+        <label>Applies to</label>
+        <select id="nf-entity">
+          <option value="pole">Pole</option>
+          <option value="closure">Closure</option>
+          <option value="route">Fiber</option>
+          <option value="site">Site</option>
+          <option value="equipment">Equipment</option>
+        </select>
+        <label>Field Label</label>
+        <input id="nf-label" placeholder="e.g. Condition, Owner, Install Date">
+        <label>Field Type</label>
+        <select id="nf-type" onchange="document.getElementById('nf-opts-wrap').style.display=this.value==='dropdown'?'':'none'">
+          <option value="text">Text</option>
+          <option value="dropdown">Dropdown</option>
+        </select>
+        <div id="nf-opts-wrap" style="display:none;">
+          <label>Options (one per line)</label>
+          <textarea id="nf-opts" rows="3" placeholder="Good&#10;Fair&#10;Poor"></textarea>
+        </div>
+        <div class="btn-row"><button class="primary" onclick="addField()">Add Field</button></div>
+      </div>
+    </div>
+
+    <div id="tab-connectors" style="display:none;">
+      <div class="card">
+        <h3>Connector Types</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">Enable the connector types used at your sites. Disabled types are hidden from all dropdowns.</p>
+        <div id="connectors-list"></div>
+      </div>
+    </div>
+
+    <div id="tab-equipment" style="display:none;">
+      <div class="card">
+        <h3>SFP Types</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">Define SFP optic types with their port configurations. Each port has a label and connector type.</p>
+        <div id="sfp-types-list"></div>
+      </div>
+      <div class="card" id="sfp-form-card">
+        <h3 id="sfp-form-title">Add SFP Type</h3>
+        <label>SFP Name</label>
+        <input id="ns-name" placeholder="e.g. Dual XGS, XGS+GPON Combo">
+        <label>Notes (optional)</label>
+        <input id="ns-notes">
+        <div style="margin-top:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <label style="margin:0;font-size:12px;color:#666;font-weight:600;">Ports</label>
+            <button class="btn-row" style="padding:4px 10px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:white;" onclick="addSfpPortRow()">+ Add Port</button>
+          </div>
+          <div id="sfp-port-rows"></div>
+        </div>
+        <label>Compatible Port Types <span style="font-size:11px;color:#aaa;font-weight:400;">(comma-separated, e.g: xp, qsfp — leave blank for universal)</span></label>
+        <input id="ns-compat" placeholder="xp, qsfp, sfp_plus">
+        <div class="btn-row" style="display:flex;gap:8px;">
+          <button class="primary" id="ns-submit-btn" onclick="addSfpType()">Add SFP Type</button>
+          <button id="ns-cancel-btn" style="display:none;padding:8px 16px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:white;font-size:13px;" onclick="cancelEditSfp()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Card Types</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">Define line card types for chassis equipment (e.g. XG1601 card for a Calix E7).</p>
+        <div id="card-types-list"></div>
+      </div>
+      <div class="card" id="card-type-form-card">
+        <h3 id="card-type-form-title">Add Card Type</h3>
+        <label>Card Type Name</label>
+        <input id="nct-name" placeholder="e.g. XG1601 Card">
+        <label>Notes (optional)</label>
+        <input id="nct-notes">
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid #eee;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:12px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:.4px;">Port Groups</div>
+            <button class="btn-row" style="padding:4px 10px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:white;" onclick="addCardTypePortGroup()">+ Add Group</button>
+          </div>
+          <p style="font-size:12px;color:#aaa;margin:0 0 10px;">Each group defines ports (fixed) or SFP slots. "Max ports/socket" fixes port numbering for groups where each physical socket owns multiple logical ports.</p>
+          <div id="nct-groups"></div>
+        </div>
+        <div class="btn-row" style="display:flex;gap:8px;">
+          <button class="primary" id="nct-submit-btn" onclick="addCardType()">Add Card Type</button>
+          <button id="nct-cancel-btn" style="display:none;padding:8px 16px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:white;font-size:13px;" onclick="cancelEditCardType()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Equipment Templates</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">Define shelf/device templates. Simple templates use port groups directly; Chassis templates hold card slots.</p>
+        <div id="equip-templates-list"></div>
+      </div>
+      <div class="card" id="tmpl-form-card">
+        <h3 id="tmpl-form-title">Add Equipment Template</h3>
+        <label>Template Name</label>
+        <input id="nt-name" placeholder="e.g. Calix E7, 2-Way Splitter">
+        <label>Equipment Type</label>
+        <select id="nt-type">
+          <option value="olt">OLT</option>
+          <option value="switch">Switch</option>
+          <option value="router">Router</option>
+          <option value="splitter">Splitter</option>
+        </select>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid #eee;">
+          <label style="margin-bottom:6px;">Template Mode</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;font-size:13px;">
+              <input type="radio" name="nt-mode" value="simple" checked onchange="toggleTemplateMode('simple')"> Simple (port groups)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;font-size:13px;">
+              <input type="radio" name="nt-mode" value="chassis" onchange="toggleTemplateMode('chassis')"> Chassis (card slots)
+            </label>
+          </div>
+          <div id="nt-simple-fields">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div style="font-size:12px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:.4px;">Port Groups</div>
+              <button class="btn-row" style="padding:4px 10px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:white;" onclick="addTemplatePortGroup()">+ Add Group</button>
+            </div>
+            <p style="font-size:12px;color:#aaa;margin:0 0 10px;">Each group defines a set of ports (fixed) or SFP slots. Port type is used to filter compatible SFP optics.</p>
+            <div id="nt-groups"></div>
+          </div>
+          <div id="nt-chassis-fields" style="display:none;">
+            <label>Card Slots</label>
+            <input type="number" id="nt-card-slot-count" min="1" max="20" placeholder="e.g. 7">
+            <label>Slot Prefix Pattern <span style="font-size:11px;color:#aaa;font-weight:400;">use {n} for slot number, e.g. 1/{n}/</span></label>
+            <input id="nt-card-prefix-pattern" placeholder="1/{n}/">
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid #eee;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <div style="font-size:12px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:.4px;">Static Ports <span style="font-size:10px;font-weight:400;color:#aaa;text-transform:none;">(always present, not on a card — e.g. chassis RJ45 ports)</span></div>
+                <button class="btn-row" style="padding:4px 10px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:white;" onclick="addChassisStaticPortGroup()">+ Add Group</button>
+              </div>
+              <div id="nt-chassis-static-groups"></div>
+            </div>
+          </div>
+        </div>
+        <div class="btn-row" style="display:flex;gap:8px;">
+          <button class="primary" id="nt-submit-btn" onclick="addEquipTemplate()">Add Template</button>
+          <button id="nt-cancel-btn" style="display:none;padding:8px 16px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:white;font-size:13px;" onclick="cancelEditTemplate()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ADMIN_CONNECTOR_COLORS = {
+  'LC/UPC (Single)':'#1565c0','LC/UPC (Dual)':'#1565c0','LC/APC':'#2e7d32','SC/UPC':'#1565c0','SC/APC':'#2e7d32',
+  'ST/UPC':'#1565c0','ST/APC':'#2e7d32','FC/UPC':'#1565c0','FC/APC':'#2e7d32',
+  'MPO/MTP':'#00838f','E2000/APC':'#2e7d32','MTRJ':'#6a1b9a','SMA':'#78909c','RJ45':'#7b5e3a'
+};
+
+let currentUserId = null;
+let fieldDefs = [];
+let connectorTypes = [];
+let sfpTypes = [];
+let cardTypes = [];
+let equipTemplates = [];
+let _editingSfpId = null;
+let _editingCardTypeId = null;
+let _editingTemplateId = null;
+
+async function api(method, path, body) {
+  const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('/api' + path, opts);
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || r.statusText); }
+  return r.json();
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function goBackToMap() {
+  window.location.href = '/';
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  document.getElementById('tab-users').style.display = tab === 'users' ? '' : 'none';
+  document.getElementById('tab-fields').style.display = tab === 'fields' ? '' : 'none';
+  document.getElementById('tab-connectors').style.display = tab === 'connectors' ? '' : 'none';
+  document.getElementById('tab-equipment').style.display = tab === 'equipment' ? '' : 'none';
+}
+
+function renderConnectors() {
+  const el = document.getElementById('connectors-list');
+  el.innerHTML = connectorTypes.map(c => {
+    const color = ADMIN_CONNECTOR_COLORS[c.name] || '#888';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f0f0;">
+      <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${color};flex-shrink:0;"></span>
+      <span style="font-size:13px;flex:1;">${esc(c.name)}</span>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
+        <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange="toggleConnector('${esc(c.name)}', this.checked)" style="width:auto;">
+        <span style="font-size:12px;color:#666;">${c.enabled ? 'Enabled' : 'Disabled'}</span>
+      </label>
+    </div>`;
+  }).join('');
+}
+
+async function toggleConnector(name, enabled) {
+  try {
+    const updated = await api('PUT', '/connector-types', { name, enabled });
+    const ct = connectorTypes.find(c => c.name === name);
+    if (ct) ct.enabled = updated.enabled;
+    renderConnectors();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function renderUsers() {
+  const el = document.getElementById('users-list');
+  try {
+    const users = await api('GET', '/users');
+    el.innerHTML = `<table class="user-table">
+      <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th></th></tr></thead>
+      <tbody>${users.map(u => `<tr>
+        <td>${esc(u.username)}</td>
+        <td>${esc(u.full_name || '—')}</td>
+        <td>${esc(u.role)}</td>
+        <td>${u.id !== currentUserId ? `<button class="icon-btn" onclick="deleteUser(${u.id})">🗑</button>` : ''}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch (err) { el.innerHTML = `<div style="color:red;">${esc(err.message)}</div>`; }
+}
+
+async function addUser() {
+  const username = document.getElementById('nu-name').value.trim();
+  const password = document.getElementById('nu-pw').value;
+  const full_name = document.getElementById('nu-full').value.trim();
+  const role = document.getElementById('nu-role').value;
+  if (!username || !password) { alert('Username and password required'); return; }
+  try {
+    await api('POST', '/users', { username, password, full_name, role });
+    document.getElementById('nu-name').value = '';
+    document.getElementById('nu-pw').value = '';
+    document.getElementById('nu-full').value = '';
+    renderUsers();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deleteUser(userId) {
+  if (!confirm('Delete this user?')) return;
+  try {
+    await api('DELETE', '/users/' + userId);
+    renderUsers();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function renderFields() {
+  const el = document.getElementById('fields-list');
+  const entityLabels = { pole: 'Pole', closure: 'Closure', route: 'Fiber', site: 'Site', equipment: 'Equipment' };
+  const rows = fieldDefs.map(d => `<tr>
+    <td><span class="field-badge ${esc(d.entity_type)}">${esc(entityLabels[d.entity_type] || d.entity_type)}</span></td>
+    <td>${esc(d.field_label)}</td>
+    <td>${esc(d.field_type)}</td>
+    <td>${d.field_type === 'dropdown' && d.options ? esc(d.options.join(', ')) : '—'}</td>
+    <td style="text-align:center;"><input type="checkbox" title="Prompt when placing" ${d.show_on_create ? 'checked' : ''} onchange="toggleFieldOnCreate(${d.id}, this.checked)"></td>
+    <td><button class="icon-btn" onclick="deleteField(${d.id})">🗑</button></td>
+  </tr>`).join('');
+  el.innerHTML = `<table class="user-table">
+    <thead><tr><th>Entity</th><th>Label</th><th>Type</th><th>Options</th><th title="Prompt on place">On Place</th><th></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6" style="color:#888;text-align:center;padding:16px;">No custom fields yet</td></tr>'}</tbody>
+  </table>`;
+}
+
+async function addField() {
+  const entity_type = document.getElementById('nf-entity').value;
+  const field_label = document.getElementById('nf-label').value.trim();
+  const field_type = document.getElementById('nf-type').value;
+  const optsRaw = document.getElementById('nf-opts').value;
+  if (!field_label) { alert('Field label required'); return; }
+  const options = field_type === 'dropdown' ? optsRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  try {
+    const def = await api('POST', '/field-defs', { entity_type, field_label, field_type, options });
+    fieldDefs.push(def);
+    document.getElementById('nf-label').value = '';
+    document.getElementById('nf-opts').value = '';
+    renderFields();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function toggleFieldOnCreate(id, value) {
+  const def = fieldDefs.find(d => d.id === id);
+  if (!def) return;
+  try {
+    const updated = await api('PUT', `/field-defs/${id}`, { field_label: def.field_label, options: def.options, show_on_create: value });
+    Object.assign(def, updated);
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deleteField(id) {
+  if (!confirm('Delete this field and all its values?')) return;
+  try {
+    await api('DELETE', '/field-defs/' + id);
+    fieldDefs = fieldDefs.filter(d => d.id !== id);
+    renderFields();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function renderSfpTypes() {
+  const el = document.getElementById('sfp-types-list');
+  if (!sfpTypes.length) {
+    el.innerHTML = '<p style="color:#888;font-size:13px;">No SFP types defined yet.</p>';
+    return;
+  }
+  el.innerHTML = `<table class="user-table">
+    <thead><tr><th>Name</th><th>Compatible</th><th>Ports</th><th>Notes</th><th></th></tr></thead>
+    <tbody>${sfpTypes.map(s => {
+      const portSummary = (s.port_configs || []).map(p => `${p.label || '—'} (${p.connector_type || 'any'})`).join(', ') || '—';
+      const compat = s.compatible_port_types || [];
+      const compatBadges = compat.length
+        ? compat.map(t => `<span style="display:inline-block;background:#e8eaf6;color:#283593;border-radius:3px;font-size:10px;padding:1px 5px;margin-right:2px;">${esc(t)}</span>`).join('')
+        : '<span style="font-size:11px;color:#aaa;">universal</span>';
+      return `<tr>
+        <td>${esc(s.name)}</td>
+        <td>${compatBadges}</td>
+        <td style="font-size:12px;color:#555;">${esc(portSummary)}</td>
+        <td style="font-size:12px;color:#888;">${esc(s.notes || '')}</td>
+        <td style="white-space:nowrap;">
+          <button class="icon-btn" onclick="editSfpType(${s.id})" title="Edit">✏️</button>
+          <button class="icon-btn" onclick="deleteSfpType(${s.id})" title="Delete">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function addSfpPortRow() {
+  const container = document.getElementById('sfp-port-rows');
+  const enabledConnectors = connectorTypes.filter(c => c.enabled);
+  const opts = enabledConnectors.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px;';
+  row.innerHTML = `
+    <input placeholder="Port label (e.g. xp)" style="flex:1;padding:6px 8px;font-size:13px;border:1px solid #ccc;border-radius:4px;" class="spr-label">
+    <select style="flex:1;padding:6px 8px;font-size:13px;border:1px solid #ccc;border-radius:4px;" class="spr-connector">
+      <option value="">— Any connector —</option>${opts}
+    </select>
+    <button onclick="this.closest('div').remove()" style="padding:4px 8px;font-size:12px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:white;">✕</button>`;
+  container.appendChild(row);
+}
+
+async function addSfpType() {
+  const name = document.getElementById('ns-name').value.trim();
+  const notes = document.getElementById('ns-notes').value.trim();
+  if (!name) { alert('Name required'); return; }
+  const rows = document.querySelectorAll('#sfp-port-rows > div');
+  const port_configs = Array.from(rows).map(row => {
+    const cfg = {
+      label: row.querySelector('.spr-label').value.trim(),
+      connector_type: row.querySelector('.spr-connector').value,
+    };
+    return cfg;
+  });
+  const compatRaw = document.getElementById('ns-compat').value.trim();
+  const compatible_port_types = compatRaw ? compatRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  try {
+    if (_editingSfpId) {
+      const s = await api('PUT', '/sfp-types/' + _editingSfpId, { name, port_configs, notes: notes || null, compatible_port_types });
+      const idx = sfpTypes.findIndex(t => t.id === _editingSfpId);
+      if (idx >= 0) sfpTypes[idx] = s;
+    } else {
+      const s = await api('POST', '/sfp-types', { name, port_configs, notes: notes || null, compatible_port_types });
+      sfpTypes.push(s);
+    }
+    cancelEditSfp();
+    renderSfpTypes();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deleteSfpType(id) {
+  if (!confirm('Delete this SFP type?')) return;
+  try {
+    await api('DELETE', '/sfp-types/' + id);
+    sfpTypes = sfpTypes.filter(s => s.id !== id);
+    renderSfpTypes();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function populateSfpPortRows(portConfigs) {
+  document.getElementById('sfp-port-rows').innerHTML = '';
+  (portConfigs || []).forEach(cfg => {
+    addSfpPortRow();
+    const rows = document.querySelectorAll('#sfp-port-rows > div');
+    const row = rows[rows.length - 1];
+    row.querySelector('.spr-label').value = cfg.label || '';
+    row.querySelector('.spr-connector').value = cfg.connector_type || '';
+  });
+}
+
+function populatePortGroupRows(containerId, portGroups) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  (portGroups || []).forEach(group => {
+    addPortGroupRow(container);
+    const row = container.lastElementChild;
+    row.querySelector('.pg-label').value = group.label || '';
+    row.querySelector('.pg-port-type').value = group.port_type || '';
+    const kindSel = row.querySelector('.pg-kind');
+    kindSel.value = group.kind || 'sfp_slot';
+    row.querySelector('.pg-count').value = group.count || '';
+    row.querySelector('.pg-prefix').value = group.label_prefix || '';
+    if (group.max_ports_per_slot) row.querySelector('.pg-mps').value = group.max_ports_per_slot;
+    togglePgConnector(kindSel);
+    if (group.kind === 'fixed' && group.connector_type) row.querySelector('.pg-connector').value = group.connector_type;
+  });
+}
+
+function editSfpType(id) {
+  const s = sfpTypes.find(t => t.id === id);
+  if (!s) return;
+  _editingSfpId = id;
+  document.getElementById('ns-name').value = s.name;
+  document.getElementById('ns-notes').value = s.notes || '';
+  document.getElementById('ns-compat').value = (s.compatible_port_types || []).join(', ');
+  populateSfpPortRows(s.port_configs);
+  document.getElementById('sfp-form-title').textContent = 'Edit SFP Type';
+  document.getElementById('ns-submit-btn').textContent = 'Save Changes';
+  document.getElementById('ns-cancel-btn').style.display = '';
+  document.getElementById('sfp-form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEditSfp() {
+  _editingSfpId = null;
+  document.getElementById('ns-name').value = '';
+  document.getElementById('ns-notes').value = '';
+  document.getElementById('ns-compat').value = '';
+  document.getElementById('sfp-port-rows').innerHTML = '';
+  document.getElementById('sfp-form-title').textContent = 'Add SFP Type';
+  document.getElementById('ns-submit-btn').textContent = 'Add SFP Type';
+  document.getElementById('ns-cancel-btn').style.display = 'none';
+}
+
+function renderEquipTemplates() {
+  const el = document.getElementById('equip-templates-list');
+  if (!equipTemplates.length) {
+    el.innerHTML = '<p style="color:#888;font-size:13px;">No equipment templates defined yet.</p>';
+    return;
+  }
+  const typeLabels = { olt: 'OLT', switch: 'Switch', router: 'Router', splitter: 'Splitter' };
+  el.innerHTML = `<table class="user-table">
+    <thead><tr><th>Name</th><th>Type</th><th>Structure</th><th></th></tr></thead>
+    <tbody>${equipTemplates.map(t => {
+      let structSummary;
+      if (t.card_slot_count) {
+        const staticGroups = (t.port_groups || []).map(g =>
+          `<span style="display:inline-block;background:#f5f5f5;border:1px solid #ddd;border-radius:3px;font-size:10px;padding:1px 4px;margin-right:2px;">${esc(g.label)} ×${g.count}</span>`
+        ).join('');
+        structSummary = `<span style="display:inline-block;background:#fff3e0;border:1px solid #ffe082;border-radius:3px;font-size:11px;padding:1px 5px;margin-right:3px;">Chassis — ${t.card_slot_count} card slots</span><span style="font-size:11px;color:#888;">pattern: ${esc(t.card_slot_prefix_pattern || '{n}/')}</span>${staticGroups ? ' ' + staticGroups : ''}`;
+      } else if (t.port_groups && t.port_groups.length) {
+        structSummary = t.port_groups.map(g => {
+          const kindLabel = g.kind === 'sfp_slot' ? 'SFP' : 'fixed';
+          const mps = g.max_ports_per_slot ? ` mps:${g.max_ports_per_slot}` : '';
+          return `<span style="display:inline-block;background:#f5f5f5;border:1px solid #ddd;border-radius:3px;font-size:11px;padding:1px 5px;margin-right:3px;">${esc(g.label)} ×${g.count} (${kindLabel}${mps})</span>`;
+        }).join('');
+      } else {
+        const parts = [];
+        if (t.fixed_port_count) parts.push(`${t.fixed_port_count}× fixed`);
+        if (t.sfp_slot_count) parts.push(`${t.sfp_slot_count}× SFP slot`);
+        structSummary = `<span style="font-size:12px;color:#555;">${parts.join(', ') || '—'}</span>`;
+      }
+      return `<tr>
+        <td>${esc(t.name)}</td>
+        <td><span style="background:#e8eaf6;color:#283593;border-radius:3px;font-size:11px;padding:2px 6px;">${esc(typeLabels[t.equipment_type] || t.equipment_type)}</span></td>
+        <td>${structSummary}</td>
+        <td style="white-space:nowrap;">
+          <button class="icon-btn" onclick="editEquipTemplate(${t.id})" title="Edit">✏️</button>
+          <button class="icon-btn" onclick="deleteEquipTemplate(${t.id})" title="Delete">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function addPortGroupRow(container) {
+  const enabledConnectors = connectorTypes.filter(c => c.enabled);
+  const connOpts = '<option value="">— None —</option>' +
+    enabledConnectors.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;padding:8px;background:#fafafa;border:1px solid #eee;border-radius:6px;';
+  row.innerHTML = `
+    <input placeholder="Label (e.g. XP Ports)" style="width:120px;padding:5px 7px;font-size:12px;border:1px solid #ccc;border-radius:4px;" class="pg-label">
+    <input placeholder="Port type (e.g. xp)" style="width:90px;padding:5px 7px;font-size:12px;border:1px solid #ccc;border-radius:4px;" class="pg-port-type">
+    <select style="padding:5px 7px;font-size:12px;border:1px solid #ccc;border-radius:4px;" class="pg-kind" onchange="togglePgConnector(this)">
+      <option value="sfp_slot">SFP Slot</option>
+      <option value="fixed">Fixed</option>
+    </select>
+    <input type="number" placeholder="Count" min="1" style="width:60px;padding:5px 7px;font-size:12px;border:1px solid #ccc;border-radius:4px;" class="pg-count">
+    <input placeholder="Label prefix (e.g. xp)" style="width:100px;padding:5px 7px;font-size:12px;border:1px solid #ccc;border-radius:4px;" class="pg-prefix">
+    <input type="number" placeholder="Max ports/socket" min="1" title="Max logical ports per SFP socket (fixes XP port numbering)" style="width:130px;padding:5px 7px;font-size:12px;border:1px solid #ccc;border-radius:4px;" class="pg-mps">
+    <select style="padding:5px 7px;font-size:12px;border:1px solid #ccc;border-radius:4px;display:none;" class="pg-connector">${connOpts}</select>
+    <button onclick="this.closest('div').remove()" style="padding:4px 10px;font-size:12px;border:1px solid #e57373;border-radius:4px;cursor:pointer;background:#fff5f5;color:#c62828;margin-left:auto;">Remove</button>`;
+  container.appendChild(row);
+}
+
+function addTemplatePortGroup() { addPortGroupRow(document.getElementById('nt-groups')); }
+function addCardTypePortGroup() { addPortGroupRow(document.getElementById('nct-groups')); }
+function addChassisStaticPortGroup() { addPortGroupRow(document.getElementById('nt-chassis-static-groups')); }
+
+function togglePgConnector(kindSelect) {
+  const row = kindSelect.closest('div');
+  row.querySelector('.pg-connector').style.display = kindSelect.value === 'fixed' ? '' : 'none';
+  row.querySelector('.pg-mps').style.display = kindSelect.value === 'sfp_slot' ? '' : 'none';
+}
+
+function readPortGroupRows(groupRows) {
+  return Array.from(groupRows).map((row, i) => {
+    const label = row.querySelector('.pg-label').value.trim();
+    const port_type = row.querySelector('.pg-port-type').value.trim();
+    const kind = row.querySelector('.pg-kind').value;
+    const count = parseInt(row.querySelector('.pg-count').value) || 1;
+    const label_prefix = row.querySelector('.pg-prefix').value.trim();
+    const connector_type = kind === 'fixed' ? (row.querySelector('.pg-connector').value || null) : null;
+    const mpsVal = parseInt(row.querySelector('.pg-mps')?.value);
+    const max_ports_per_slot = kind === 'sfp_slot' && mpsVal > 0 ? mpsVal : null;
+    const id = label_prefix || label.toLowerCase().replace(/\s+/g, '_') || `group${i}`;
+    return { id, label: label || id, port_type: port_type || null, kind, count, label_prefix, connector_type, max_ports_per_slot };
+  });
+}
+
+function toggleTemplateMode(mode) {
+  document.getElementById('nt-simple-fields').style.display = mode === 'simple' ? '' : 'none';
+  document.getElementById('nt-chassis-fields').style.display = mode === 'chassis' ? '' : 'none';
+}
+
+function renderCardTypes() {
+  const el = document.getElementById('card-types-list');
+  if (!cardTypes.length) {
+    el.innerHTML = '<p style="color:#888;font-size:13px;">No card types defined yet.</p>';
+    return;
+  }
+  el.innerHTML = `<table class="user-table">
+    <thead><tr><th>Name</th><th>Port Groups</th><th>Notes</th><th></th></tr></thead>
+    <tbody>${cardTypes.map(ct => {
+      const groupSummary = (ct.port_groups || []).map(g => {
+        const kindLabel = g.kind === 'sfp_slot' ? 'SFP' : 'fixed';
+        const mps = g.max_ports_per_slot ? ` mps:${g.max_ports_per_slot}` : '';
+        return `<span style="display:inline-block;background:#f5f5f5;border:1px solid #ddd;border-radius:3px;font-size:11px;padding:1px 5px;margin-right:3px;">${esc(g.label)} ×${g.count} (${kindLabel}${mps})</span>`;
+      }).join('');
+      return `<tr>
+        <td>${esc(ct.name)}</td>
+        <td>${groupSummary}</td>
+        <td style="font-size:12px;color:#888;">${esc(ct.notes || '')}</td>
+        <td style="white-space:nowrap;">
+          <button class="icon-btn" onclick="editCardType(${ct.id})" title="Edit">✏️</button>
+          <button class="icon-btn" onclick="deleteCardType(${ct.id})" title="Delete">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function addCardType() {
+  const name = document.getElementById('nct-name').value.trim();
+  const notes = document.getElementById('nct-notes').value.trim();
+  if (!name) { alert('Name required'); return; }
+  const groupRows = document.querySelectorAll('#nct-groups > div');
+  if (!groupRows.length) { alert('Add at least one port group'); return; }
+  const port_groups = readPortGroupRows(groupRows);
+  try {
+    if (_editingCardTypeId) {
+      const ct = await api('PUT', '/card-types/' + _editingCardTypeId, { name, port_groups, notes: notes || null });
+      const idx = cardTypes.findIndex(t => t.id === _editingCardTypeId);
+      if (idx >= 0) cardTypes[idx] = ct;
+    } else {
+      const ct = await api('POST', '/card-types', { name, port_groups, notes: notes || null });
+      cardTypes.push(ct);
+    }
+    cancelEditCardType();
+    renderCardTypes();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function editCardType(id) {
+  const ct = cardTypes.find(t => t.id === id);
+  if (!ct) return;
+  _editingCardTypeId = id;
+  document.getElementById('nct-name').value = ct.name;
+  document.getElementById('nct-notes').value = ct.notes || '';
+  populatePortGroupRows('nct-groups', ct.port_groups);
+  document.getElementById('card-type-form-title').textContent = 'Edit Card Type';
+  document.getElementById('nct-submit-btn').textContent = 'Save Changes';
+  document.getElementById('nct-cancel-btn').style.display = '';
+  document.getElementById('card-type-form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEditCardType() {
+  _editingCardTypeId = null;
+  document.getElementById('nct-name').value = '';
+  document.getElementById('nct-notes').value = '';
+  document.getElementById('nct-groups').innerHTML = '';
+  document.getElementById('card-type-form-title').textContent = 'Add Card Type';
+  document.getElementById('nct-submit-btn').textContent = 'Add Card Type';
+  document.getElementById('nct-cancel-btn').style.display = 'none';
+}
+
+async function deleteCardType(id) {
+  if (!confirm('Delete this card type?')) return;
+  try {
+    await api('DELETE', '/card-types/' + id);
+    cardTypes = cardTypes.filter(ct => ct.id !== id);
+    renderCardTypes();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function addEquipTemplate() {
+  const name = document.getElementById('nt-name').value.trim();
+  const equipment_type = document.getElementById('nt-type').value;
+  if (!name) { alert('Template name required'); return; }
+  const mode = document.querySelector('input[name="nt-mode"]:checked').value;
+  let payload;
+  if (mode === 'chassis') {
+    const card_slot_count = parseInt(document.getElementById('nt-card-slot-count').value);
+    const card_slot_prefix_pattern = document.getElementById('nt-card-prefix-pattern').value.trim();
+    if (!card_slot_count) { alert('Card slot count required for chassis templates'); return; }
+    // Static fixed port groups on the chassis itself (e.g. RJ45 management ports)
+    const staticRows = document.querySelectorAll('#nt-chassis-static-groups > div');
+    const port_groups = staticRows.length ? readPortGroupRows(staticRows) : null;
+    payload = { name, equipment_type, card_slot_count, card_slot_prefix_pattern: card_slot_prefix_pattern || '{n}/', port_groups };
+  } else {
+    const groupRows = document.querySelectorAll('#nt-groups > div');
+    if (!groupRows.length) { alert('Add at least one port group'); return; }
+    payload = { name, equipment_type, port_groups: readPortGroupRows(groupRows) };
+  }
+  try {
+    if (_editingTemplateId) {
+      const t = await api('PUT', '/equipment-templates/' + _editingTemplateId, payload);
+      const idx = equipTemplates.findIndex(t => t.id === _editingTemplateId);
+      if (idx >= 0) equipTemplates[idx] = t;
+    } else {
+      const t = await api('POST', '/equipment-templates', payload);
+      equipTemplates.push(t);
+    }
+    cancelEditTemplate();
+    renderEquipTemplates();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function editEquipTemplate(id) {
+  const t = equipTemplates.find(t => t.id === id);
+  if (!t) return;
+  _editingTemplateId = id;
+  document.getElementById('nt-name').value = t.name;
+  document.getElementById('nt-type').value = t.equipment_type;
+  if (t.card_slot_count) {
+    document.querySelector('input[name="nt-mode"][value="chassis"]').checked = true;
+    toggleTemplateMode('chassis');
+    document.getElementById('nt-card-slot-count').value = t.card_slot_count;
+    document.getElementById('nt-card-prefix-pattern').value = t.card_slot_prefix_pattern || '';
+    populatePortGroupRows('nt-chassis-static-groups', t.port_groups || []);
+  } else {
+    document.querySelector('input[name="nt-mode"][value="simple"]').checked = true;
+    toggleTemplateMode('simple');
+    populatePortGroupRows('nt-groups', t.port_groups || []);
+  }
+  document.getElementById('tmpl-form-title').textContent = 'Edit Equipment Template';
+  document.getElementById('nt-submit-btn').textContent = 'Save Changes';
+  document.getElementById('nt-cancel-btn').style.display = '';
+  document.getElementById('tmpl-form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEditTemplate() {
+  _editingTemplateId = null;
+  document.getElementById('nt-name').value = '';
+  document.getElementById('nt-groups').innerHTML = '';
+  document.getElementById('nt-chassis-static-groups').innerHTML = '';
+  document.getElementById('nt-card-slot-count').value = '';
+  document.getElementById('nt-card-prefix-pattern').value = '';
+  document.querySelector('input[name="nt-mode"][value="simple"]').checked = true;
+  toggleTemplateMode('simple');
+  document.getElementById('tmpl-form-title').textContent = 'Add Equipment Template';
+  document.getElementById('nt-submit-btn').textContent = 'Add Template';
+  document.getElementById('nt-cancel-btn').style.display = 'none';
+}
+
+async function deleteEquipTemplate(id) {
+  if (!confirm('Delete this template? Equipment using it will keep their ports.')) return;
+  try {
+    await api('DELETE', '/equipment-templates/' + id);
+    equipTemplates = equipTemplates.filter(t => t.id !== id);
+    renderEquipTemplates();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+
+async function init() {
+  try {
+    const me = await api('GET', '/me');
+    if (me.role !== 'admin') { window.location.href = '/'; return; }
+    currentUserId = me.id;
+    [fieldDefs, connectorTypes, sfpTypes, cardTypes, equipTemplates] = await Promise.all([
+      api('GET', '/field-defs'),
+      api('GET', '/connector-types'),
+      api('GET', '/sfp-types'),
+      api('GET', '/card-types'),
+      api('GET', '/equipment-templates'),
+    ]);
+  } catch (err) {
+    window.location.href = '/';
+    return;
+  }
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  renderUsers();
+  renderFields();
+  renderConnectors();
+  renderSfpTypes();
+  renderCardTypes();
+  renderEquipTemplates();
+}
+
+init();
+</script>
+</body>
+</html>

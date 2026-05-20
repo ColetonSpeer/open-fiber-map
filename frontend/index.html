@@ -1,0 +1,3274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Fiber Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f5f5f7; color: #1d1d1f; height: 100vh; overflow: hidden; }
+
+/* Login screen */
+#login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+#login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 360px; }
+#login-box h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+#login-box .subtitle { font-size: 14px; color: #666; margin-bottom: 24px; }
+#login-box label { display: block; font-size: 13px; color: #444; margin-bottom: 4px; margin-top: 12px; }
+#login-box input { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 6px; }
+#login-box input:focus { outline: none; border-color: #1a1a2e; }
+#login-box button { width: 100%; padding: 11px; font-size: 14px; background: #1a1a2e; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 20px; font-weight: 500; }
+#login-box button:hover { background: #2a2a3e; }
+#login-error { color: #c62828; font-size: 13px; margin-top: 10px; display: none; }
+
+/* Main app */
+#app { display: none; flex-direction: column; height: 100vh; }
+#topbar { display: flex; align-items: center; padding: 8px 14px; background: #1a1a2e; color: white; gap: 10px; transition: padding-left .22s ease; }
+#topbar h1 { font-size: 16px; font-weight: 600; }
+#topbar .spacer { flex: 1; }
+#topbar button { padding: 5px 10px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer; font-size: 12px; }
+#topbar button:hover { background: rgba(255,255,255,0.2); }
+#topbar .user-info { font-size: 12px; opacity: 0.8; }
+
+/* Toolbar */
+#toolbar { display: flex; gap: 6px; padding: 7px 10px; background: white; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; align-items: center; transition: padding-left .22s ease; }
+.tb { padding: 6px 12px; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; background: white; cursor: pointer; color: #333; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.tb:hover { background: #f5f5f7; }
+.tb.active { background: #e3f2fd; color: #1565c0; border-color: #1565c0; }
+.tb.danger { color: #c62828; border-color: #ffcdd2; }
+.tb.danger:hover { background: #ffebee; }
+#mode-hint { margin-left: auto; font-size: 11px; color: #888; }
+
+/* Main area */
+#main { display: flex; flex: 1; overflow: hidden; }
+#map { flex: 1; }
+#side-panel { width: 360px; background: white; border-left: 1px solid #e0e0e0; overflow-y: auto; display: none; }
+#side-panel.open { display: block; }
+.panel-header { padding: 12px 14px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
+.panel-header h2 { font-size: 15px; font-weight: 600; }
+.panel-header .meta { font-size: 11px; color: #888; margin-top: 2px; }
+.panel-meta-fields { margin: 4px 0 6px; display: flex; flex-direction: column; gap: 3px; }
+.panel-meta-field  { font-size: 13px; color: #444; line-height: 1.4; }
+.panel-meta-label  { font-weight: 600; color: #666; margin-right: 4px; }
+.close-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: #888; padding: 0 4px; }
+.close-btn:hover { color: #333; }
+
+/* Cable section */
+.section-title { font-size: 10px; font-weight: 600; color: #888; padding: 10px 14px 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.cable { border: 1px solid #e0e0e0; border-radius: 6px; margin: 6px 10px; overflow: hidden; }
+.cable-hdr { padding: 7px 10px; background: #f5f5f7; font-size: 12px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.dir-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 500; }
+.dir-IN { background: #e3f2fd; color: #1565c0; }
+.dir-OUT { background: #e8f5e9; color: #2e7d32; }
+.tube-label { font-size: 10px; color: #888; padding: 3px 10px; background: #fafafa; border-top: 1px solid #f0f0f0; }
+.fiber-row { display: flex; align-items: center; gap: 7px; padding: 4px 10px; cursor: pointer; }
+.fiber-row:hover { background: #f8f8fa; }
+.fiber-row.selected { background: #e3f2fd; outline: 1.5px solid #1565c0; }
+.fiber-row.connected .fiber-dot { opacity: 0.5; }
+.fiber-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
+.fiber-name { font-size: 12px; color: #333; }
+.conn-info { font-size: 10px; color: #888; margin-left: auto; display: flex; align-items: center; gap: 4px; }
+
+/* Selection bar */
+.sel-bar { padding: 7px 12px; background: #e3f2fd; font-size: 11px; color: #1565c0; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #bbdefb; }
+.sel-bar button { margin-left: auto; background: none; border: none; cursor: pointer; font-size: 16px; color: #1565c0; padding: 0 4px; }
+
+/* Add buttons */
+.add-btn { margin: 6px 10px; padding: 7px 10px; font-size: 12px; border: 1px dashed #ccc; border-radius: 5px; background: none; cursor: pointer; color: #666; width: calc(100% - 20px); display: flex; align-items: center; gap: 6px; justify-content: center; }
+.add-btn:hover { background: #f5f5f7; color: #333; }
+
+/* Forms */
+.form-card { margin: 6px 10px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; }
+.form-card label { font-size: 11px; color: #666; display: block; margin-bottom: 3px; margin-top: 8px; }
+.form-card label:first-child { margin-top: 0; }
+.form-card input, .form-card select, .form-card textarea { width: 100%; padding: 5px 8px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; background: white; }
+.form-card .btn-row { display: flex; gap: 6px; margin-top: 10px; }
+.form-card .btn-row button { flex: 1; padding: 6px; font-size: 12px; border-radius: 4px; cursor: pointer; border: 1px solid #ccc; background: white; }
+.form-card .btn-row button.primary { background: #1565c0; color: white; border-color: #1565c0; }
+
+/* Splice list */
+.splice-list { margin: 6px 10px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; }
+.splice-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 11px; border-bottom: 1px solid #f0f0f0; }
+.splice-item:last-child { border-bottom: none; }
+.splice-item .del-btn { margin-left: auto; background: none; border: none; cursor: pointer; color: #888; font-size: 14px; padding: 1px 4px; }
+.splice-item .del-btn:hover { color: #c62828; }
+
+/* Modals */
+.modal-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: white; border-radius: 8px; padding: 24px; min-width: 400px; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+.modal h2 { font-size: 18px; margin-bottom: 16px; }
+.modal label { display: block; font-size: 12px; color: #666; margin: 10px 0 4px; }
+.modal input, .modal select, .modal textarea { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid #ccc; border-radius: 5px; }
+.modal .btn-row { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+.modal .btn-row button { padding: 8px 16px; font-size: 13px; border-radius: 5px; cursor: pointer; border: 1px solid #ccc; background: white; }
+.modal .btn-row button.primary { background: #1565c0; color: white; border-color: #1565c0; }
+
+
+/* Markers */
+.closure-icon { width: 28px; height: 28px; background: #1565c0; border: 2px solid white; border-radius: 5px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+.closure-icon span { color: white; font-size: 9px; font-weight: 700; }
+
+/* Icon buttons */
+.icon-btn { background: none; border: none; cursor: pointer; color: #888; padding: 2px 4px; font-size: 14px; }
+.icon-btn:hover { color: #333; }
+
+/* View modal */
+.view-row { display: flex; gap: 10px; font-size: 13px; padding: 2px 0; }
+.view-label { font-weight: 600; min-width: 90px; color: #555; flex-shrink: 0; }
+.btn-primary { background: #1565c0; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+.btn-primary:hover { background: #1976d2; }
+.tb.layer-blocked { opacity: 0.4; cursor: not-allowed; }
+
+/* Dark mode */
+body.dark-mode { background: #111827; color: #f3f4f6; }
+body.dark-mode #topbar { background: #0d1117; }
+body.dark-mode #toolbar { background: #1f2937; border-bottom-color: #374151; }
+body.dark-mode .tb { background: #1f2937; border-color: #374151; color: #d1d5db; }
+body.dark-mode .tb:hover { background: #374151; }
+body.dark-mode .tb.active { background: #1e3a5f; color: #60a5fa; border-color: #2563eb; }
+body.dark-mode #views-panel { background: #1f2937!important; border-color: #374151!important; color: #9ca3af; }
+body.dark-mode #views-panel label { color: #d1d5db; }
+body.dark-mode #views-panel [style*="border-top"] { border-top-color: #374151!important; }
+body.dark-mode #map-layers-panel { background: #1f2937; border-right-color: #374151; }
+body.dark-mode #map-layers-panel [style*="background:#f8f8fa"] { background-color: #374151!important; border-bottom-color: #374151!important; }
+body.dark-mode #map-layers-panel [style*="border-top:1px solid #e0e0e0"] { border-top-color: #374151!important; }
+body.dark-mode #map-layers-panel [style*="background:white"] { background-color: #1f2937!important; border-color: #4b5563!important; color: #9ca3af!important; }
+body.dark-mode #map-layers-tab { background: #1f2937; border-color: #374151; color: #9ca3af; }
+body.dark-mode .ml-group-hdr { background: #374151; border-bottom-color: #4b5563; color: #f3f4f6; }
+body.dark-mode .ml-layer-row { border-bottom-color: #374151; color: #d1d5db; }
+body.dark-mode .ml-layer-row:hover { background: #374151; }
+body.dark-mode .ml-layer-row.active-layer { background: #1e3a5f; border-left-color: #3b82f6; }
+body.dark-mode #side-panel { background: #1f2937; border-left-color: #374151; }
+body.dark-mode .panel-header { border-bottom-color: #374151; }
+body.dark-mode .panel-header h2 { color: #f3f4f6; }
+body.dark-mode .panel-meta-field { color: #9ca3af; }
+body.dark-mode .cable { border-color: #374151; }
+body.dark-mode .cable-hdr { background: #374151; color: #d1d5db; }
+body.dark-mode .tube-label { background: #2d3748; border-top-color: #374151; color: #9ca3af; }
+body.dark-mode .fiber-row:hover { background: #374151; }
+body.dark-mode .fiber-row.selected { background: #1e3a5f; outline-color: #3b82f6; }
+body.dark-mode .fiber-name { color: #d1d5db; }
+body.dark-mode .section-title { color: #6b7280; }
+body.dark-mode .sel-bar { background: #1e3a5f; border-bottom-color: #2563eb; color: #93c5fd; }
+body.dark-mode .form-card { background: #111827; border-color: #374151; }
+body.dark-mode .form-card label { color: #9ca3af; }
+body.dark-mode .form-card input, body.dark-mode .form-card select, body.dark-mode .form-card textarea { background: #1f2937; border-color: #374151; color: #f3f4f6; }
+body.dark-mode .add-btn { border-color: #374151; color: #9ca3af; }
+body.dark-mode .add-btn:hover { background: #374151; color: #f3f4f6; }
+body.dark-mode .modal-bg { background: rgba(0,0,0,.65); }
+body.dark-mode .modal { background: #1f2937; color: #f3f4f6; }
+body.dark-mode .modal h2 { color: #f3f4f6; }
+body.dark-mode .modal label { color: #9ca3af; }
+body.dark-mode .modal input, body.dark-mode .modal select, body.dark-mode .modal textarea { background: #111827; border-color: #374151; color: #f3f4f6; }
+body.dark-mode .modal .btn-row button { background: #374151; border-color: #4b5563; color: #d1d5db; }
+body.dark-mode .splice-list { border-color: #374151; }
+body.dark-mode .splice-item { border-bottom-color: #374151; color: #d1d5db; }
+body.dark-mode #active-layer-label { background: #2563eb; color: white; }
+body.dark-mode #login-screen { background: linear-gradient(135deg, #0d1117 0%, #111827 100%); }
+body.dark-mode #login-box { background: #1f2937; }
+body.dark-mode #login-box h1 { color: #f3f4f6; }
+body.dark-mode #login-box .subtitle { color: #9ca3af; }
+body.dark-mode #login-box label { color: #9ca3af; }
+body.dark-mode #login-box input { background: #111827; border-color: #374151; color: #f3f4f6; }
+body.dark-mode #login-box button { background: #1e3a5f; }
+#map-layers-panel { position:fixed;top:0;left:-280px;width:280px;height:100vh;background:white;border-right:1px solid #d0d0d0;box-shadow:3px 0 10px rgba(0,0,0,.12);z-index:2000;display:flex;flex-direction:column;transition:left .22s ease; }
+#map-layers-tab { position:absolute;top:50%;right:-26px;transform:translateY(-50%);width:26px;height:54px;background:white;border:1px solid #d0d0d0;border-left:none;border-radius:0 8px 8px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:3px 0 6px rgba(0,0,0,.1);font-size:16px;color:#555;user-select:none; }
+#map-layers-tab:hover { background:#f5f5f7; }
+.ml-group-hdr { display:flex;align-items:center;gap:6px;padding:7px 10px 7px 8px;background:#f5f5f7;border-bottom:1px solid #eee;font-weight:600;font-size:13px;cursor:default; }
+.ml-layer-row { display:flex;align-items:center;gap:6px;padding:5px 10px 5px 24px;border-bottom:1px solid #f5f5f7;font-size:12px;cursor:pointer; }
+.ml-layer-row:hover { background:#fafafa; }
+.ml-layer-row.active-layer { background:#e3f2fd;border-left:3px solid #1565c0; }
+.ml-vis-btn { background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px;opacity:.7; }
+.ml-vis-btn:hover { opacity:1; }
+.ml-action-btn { background:none;border:none;cursor:pointer;font-size:12px;padding:0 3px;color:#888; }
+.ml-action-btn:hover { color:#333; }
+#search-wrap { position:relative;display:inline-flex;align-items:center; }
+#search-input { padding:5px 10px;font-size:12px;border:1px solid rgba(255,255,255,.35);border-radius:5px;width:200px;outline:none;background:rgba(255,255,255,.15);color:white;transition:width .2s ease,background .15s ease; }
+#search-input::placeholder { color:rgba(255,255,255,.6); }
+#search-input:focus { width:260px;background:rgba(255,255,255,.25);border-color:rgba(255,255,255,.6); }
+#search-results { display:none;position:absolute;top:calc(100% + 6px);right:0;width:320px;background:white;border:1px solid #d0d0d0;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:3000;max-height:340px;overflow-y:auto; }
+.sr-hdr { font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:6px 12px 3px;background:#f5f5f7; }
+.sr-item { padding:8px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f0f0f0; }
+.sr-item:last-child { border-bottom:none; }
+.sr-item:hover { background:#e3f2fd; }
+.sr-name { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.sr-badge { font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600;flex-shrink:0; }
+.sr-badge-pole    { background:#efebe9;color:#5d4037; }
+.sr-badge-closure { background:#fff3e0;color:#e65100; }
+.sr-badge-addr    { background:#e8f5e9;color:#2e7d32; }
+.sr-empty { padding:10px 12px;font-size:12px;color:#888;text-align:center; }
+body.dark-mode #search-input { background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.25); }
+body.dark-mode #search-input:focus { background:rgba(255,255,255,.15); }
+body.dark-mode #search-results { background:#1f2937;border-color:#374151; }
+body.dark-mode .sr-hdr { background:#374151;color:#9ca3af; }
+body.dark-mode .sr-item { border-bottom-color:#374151;color:#d1d5db; }
+body.dark-mode .sr-item:hover { background:#1e3a5f; }
+body.dark-mode .sr-empty { color:#6b7280; }
+.import-progress-wrap { background:#e5e7eb; border-radius:4px; height:8px; margin:12px 0 4px; overflow:hidden; }
+.import-progress-bar  { background:#1565c0; height:100%; width:0; transition:width .2s; }
+.import-assign-row    { display:flex; align-items:center; gap:12px; margin:6px 0; font-size:13px; }
+.import-assign-row label { display:flex; align-items:center; gap:4px; cursor:pointer; }
+body.dark-mode .import-progress-wrap { background:#374151; }
+</style>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+<script>if(localStorage.getItem('ofm-dark-mode')==='true')document.body.classList.add('dark-mode');</script>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div id="login-box">
+    <h1>Open Fiber Map</h1>
+    <p class="subtitle">Fiber Network Management</p>
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input type="text" id="username" required autocomplete="username">
+      <label for="password">Password</label>
+      <input type="password" id="password" required autocomplete="current-password">
+      <button type="submit">Sign In</button>
+      <div id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="app">
+  <div id="topbar">
+    <h1>Open Fiber Map</h1>
+    <span style="opacity: 0.6;">Fiber Network</span>
+    <div class="spacer"></div>
+    <div id="search-wrap">
+      <input type="text" id="search-input" placeholder="🔍 Search address, pole, closure…"
+        autocomplete="off"
+        oninput="onSearchInput()"
+        onkeydown="onSearchKeydown(event)"
+        onfocus="if(this.value.trim().length>=2)renderSearchResults()">
+      <div id="search-results"></div>
+    </div>
+    <span class="user-info" id="user-info"></span>
+    <button id="admin-btn" style="display:none;" onclick="window.location.href='/admin'">Admin</button>
+    <button onclick="logout()">Sign Out</button>
+  </div>
+  <div id="toolbar">
+    <button class="tb active" id="btn-select" onclick="setMode('select')">Select</button>
+    <button class="tb" id="btn-closure" onclick="setMode('closure')">+ Closure</button>
+    <button class="tb" id="btn-route" onclick="setMode('route')">+ Fiber</button>
+    <button class="tb" id="btn-pole" onclick="setMode('pole')">+ Pole</button>
+    <button class="tb" id="btn-site" onclick="pickSiteType()">+ Site</button>
+    <button class="tb" id="btn-delete" onclick="setMode('delete')" style="color:#c62828;">Delete Area</button>
+    <button class="tb" id="btn-edit" onclick="setMode('edit')" style="color:#1565c0;">✏ Edit</button>
+    <button class="tb" id="btn-views" onclick="toggleViewsPanel()">🗂 Views</button>
+    <button class="tb" onclick="document.getElementById('kml-import-input').click()">📥 Import</button>
+    <input type="file" id="kml-import-input" accept=".kml,.kmz" style="display:none" onchange="onImportFileChosen(this)">
+    <span id="active-layer-label" style="display:none;font-size:11px;padding:3px 8px;background:#1565c0;color:white;border-radius:4px;">Layer: —</span>
+    <span id="mode-hint">Click a closure to view splices</span>
+  </div>
+  <div id="views-panel" style="display:none;position:absolute;top:44px;left:auto;z-index:1000;background:white;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;min-width:180px;box-shadow:0 2px 8px rgba(0,0,0,.18);">
+    <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Basemap</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button id="lp-street" class="tb" onclick="setBasemap('street')">Street</button>
+      <button id="lp-sat" class="tb" onclick="setBasemap('sat')">Satellite</button>
+    </div>
+    <div id="lp-overlays">
+      <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Overlays</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;cursor:pointer;">
+        <input type="checkbox" id="lp-labels" onchange="setOverlay('labels',this.checked)"> Place names
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="lp-roads" onchange="setOverlay('roads',this.checked)"> Streets
+      </label>
+    </div>
+    <div style="border-top:1px solid #e0e0e0;margin-top:8px;padding-top:8px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="lp-dark" onchange="setDarkMode(this.checked)"> Dark mode
+      </label>
+    </div>
+  </div>
+  <div id="map-layers-panel">
+    <div id="map-layers-tab" onclick="toggleMapLayersPanel()">›</div>
+    <div style="padding:10px 12px;border-bottom:1px solid #e0e0e0;background:#f8f8fa;flex-shrink:0;">
+      <span style="font-weight:600;font-size:14px;">Layers</span>
+    </div>
+    <div id="map-layers-body" style="flex:1;overflow-y:auto;padding:6px 0;"></div>
+    <div style="padding:8px 10px;border-top:1px solid #e0e0e0;">
+      <button onclick="promptCreateLayerGroup()" style="width:100%;padding:7px;font-size:12px;border:1px dashed #ccc;border-radius:5px;cursor:pointer;background:white;">+ New Group</button>
+    </div>
+  </div>
+  <div id="main">
+    <div id="map"></div>
+    <div id="side-panel"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ============ HTML ESCAPING ============
+function h(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function closestPointOnSegmentPx(A, B, P) {
+  const dx = B.x - A.x, dy = B.y - A.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return { point: A, t: 0 };
+  const t = Math.max(0, Math.min(1, ((P.x - A.x) * dx + (P.y - A.y) * dy) / lenSq));
+  return { point: L.point(A.x + t * dx, A.y + t * dy), t };
+}
+
+// ============ FIBER COLORS (TIA-598) ============
+const FIBER_COLORS = [
+  { name: 'Blue',    bg: '#1565C0', border: '#0D47A1' },
+  { name: 'Orange',  bg: '#E65100', border: '#BF360C' },
+  { name: 'Green',   bg: '#2E7D32', border: '#1B5E20' },
+  { name: 'Brown',   bg: '#6D4C41', border: '#3E2723' },
+  { name: 'Slate',   bg: '#546E7A', border: '#37474F' },
+  { name: 'White',   bg: '#EEEEEE', border: '#9E9E9E' },
+  { name: 'Red',     bg: '#C62828', border: '#B71C1C' },
+  { name: 'Black',   bg: '#212121', border: '#000000' },
+  { name: 'Yellow',  bg: '#F9A825', border: '#CC8800' },
+  { name: 'Violet',  bg: '#6A1B9A', border: '#4A148C' },
+  { name: 'Rose',    bg: '#E91E63', border: '#C2185B' },
+  { name: 'Aqua',    bg: '#00838F', border: '#004D40' },
+];
+
+// ============ STATE ============
+let state = {
+  user: null,
+  mode: 'select',
+  closures: [],
+  routes: [],
+  poles: [],
+  routePoints: [],
+  routeLine: null,
+  selectedClosure: null,
+  selectedFiber: null,
+  showAddCable: false,
+  showLinkClosure: false,
+  closureMarkers: {},
+  poleMarkers: {},
+  siteMarkers: {},
+  routeLayers: {},
+  sites: [],
+  pendingSiteType: null,
+  snapPoleId: null,
+  drawAttachedPoles: [],
+  snapLayer: null,
+  snapClosureId: null,
+  snapRouteId: null,
+  snapRoutePoint: null,
+  routeSnapClosures: [],   // parallel to routePoints — closureId or null per point
+  snapSiteId: null,
+  routeSnapSites: [],      // parallel to routePoints — siteId or null per point
+  previewLine: null,
+  dragStart: null,
+  selectRect: null,
+  fieldDefs: [],
+  layerGroups: [],
+  activeLayerId: null,
+  editingRouteId: null,
+  editHandles: [],
+  editVertexPoints: [],
+  editSnapPoleId: null,
+  editSnapLayer: null,
+};
+
+let map;
+let _mapLayersPanelOpen = false;
+const panelState = { expandedCables: new Set(), expandedTubes: new Set() };
+
+// ============ API HELPERS ============
+async function api(method, path, body) {
+  const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('/api' + path, opts);
+  if (r.status === 401) {
+    showLogin();
+    throw new Error('Not authenticated');
+  }
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Server error' }));
+    throw new Error(err.error || 'Request failed');
+  }
+  return r.json();
+}
+
+// ============ LOGIN ============
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+async function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  if (!map) initMap();
+  await loadLayerPrefs();
+  loadData();
+  startSync();
+}
+
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('search-wrap')?.contains(e.target)) hideSearchResults();
+});
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!r.ok) {
+      const err = await r.json();
+      errEl.textContent = err.error || 'Login failed';
+      errEl.style.display = 'block';
+      return;
+    }
+    const user = await r.json();
+    state.user = user;
+    document.getElementById('user-info').textContent = user.username;
+    if (user.role === 'admin') document.getElementById('admin-btn').style.display = 'inline-block';
+    showApp();
+  } catch (err) {
+    errEl.textContent = 'Connection error';
+    errEl.style.display = 'block';
+  }
+});
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+  location.reload();
+}
+
+async function checkSession() {
+  try {
+    const r = await fetch('/api/me', { credentials: 'include' });
+    if (r.ok) {
+      const user = await r.json();
+      state.user = user;
+      document.getElementById('user-info').textContent = user.username;
+      if (user.role === 'admin') document.getElementById('admin-btn').style.display = 'inline-block';
+      showApp();
+    } else {
+      showLogin();
+    }
+  } catch (err) {
+    showLogin();
+  }
+}
+
+// ============ MAP ============
+function initMap() {
+  map = L.map('map', { doubleClickZoom: false, maxZoom: 22 }).setView([40.322, -80.318], 14);
+  map.createPane('roadsPane').style.zIndex = 450;
+  map.createPane('labelsPane').style.zIndex = 460;
+  streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxNativeZoom: 19, maxZoom: 22
+  });
+  satLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles &copy; Esri', maxNativeZoom: 19, maxZoom: 22 }
+  );
+  labelsLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Labels &copy; Esri', maxNativeZoom: 19, maxZoom: 22, pane: 'labelsPane' }
+  );
+  transportLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Roads &copy; Esri', maxNativeZoom: 19, maxZoom: 22, pane: 'roadsPane' }
+  );
+
+  map.on('click', onMapClick);
+  map.on('mousemove', onMapMouseMove);
+  map.on('moveend', () => {
+    const c = map.getCenter();
+    layerPrefs.mapLat = c.lat;
+    layerPrefs.mapLng = c.lng;
+    layerPrefs.mapZoom = map.getZoom();
+    saveLayerPrefs();
+    scheduleHouseNumFetch();
+    scheduleGeoContext();
+  });
+  scheduleGeoContext();
+  map.on('contextmenu', (e) => {
+    L.DomEvent.preventDefault(e.originalEvent);
+    if (state.mode !== 'select') setMode('select');
+  });
+
+  map.on('mousedown', (e) => {
+    if (state.mode !== 'delete') return;
+    L.DomEvent.preventDefault(e.originalEvent);
+    map.dragging.disable();
+    state.dragStart = e.latlng;
+  });
+
+  map.on('mouseup', (e) => {
+    if (state.mode !== 'delete' || !state.dragStart) return;
+    map.dragging.enable();
+    const start = state.dragStart;
+    state.dragStart = null;
+    if (state.selectRect) { map.removeLayer(state.selectRect); state.selectRect = null; }
+    const bounds = L.latLngBounds(start, e.latlng);
+    if (bounds.isValid() && start.distanceTo(e.latlng) > 10) {
+      promptBulkDelete(bounds);
+    }
+    setMode('select');
+  });
+}
+
+let streetLayer, satLayer, labelsLayer, transportLayer;
+let houseNumMarkers = [];
+let _houseNumTimer = null;
+let _searchTimer = null;
+let _geoResults  = [];
+let _searchAbort = null;
+let _geoContext  = null;   // { vb: 'west,north,east,south', cc: 'us' } — current admin bounds
+let _geoCtxTimer = null;
+let _pendingImport = null;  // holds { parsed, groupName } while import modal is open
+let layerPrefs = { basemap: 'street', showLabels: true, showRoads: true, showHouseNums: false, mapLat: 40.322, mapLng: -80.318, mapZoom: 14, darkMode: false };
+
+function applyLayerPrefs() {
+  if (layerPrefs.basemap === 'sat') {
+    if (!map.hasLayer(satLayer)) satLayer.addTo(map);
+    if (map.hasLayer(streetLayer)) map.removeLayer(streetLayer);
+  } else {
+    if (!map.hasLayer(streetLayer)) streetLayer.addTo(map);
+    if (map.hasLayer(satLayer)) map.removeLayer(satLayer);
+  }
+  const inSat = layerPrefs.basemap === 'sat';
+  if (inSat && layerPrefs.showLabels) { if (!map.hasLayer(labelsLayer)) labelsLayer.addTo(map); }
+  else { if (map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer); }
+  if (inSat && layerPrefs.showRoads) { if (!map.hasLayer(transportLayer)) transportLayer.addTo(map); }
+  else { if (map.hasLayer(transportLayer)) map.removeLayer(transportLayer); }
+  if (layerPrefs.showHouseNums) { fetchHouseNums(); } else { clearHouseNums(); }
+  const lsEl = document.getElementById('lp-street');
+  const lsatEl = document.getElementById('lp-sat');
+  if (lsEl) lsEl.classList.toggle('active', layerPrefs.basemap === 'street');
+  if (lsatEl) lsatEl.classList.toggle('active', layerPrefs.basemap === 'sat');
+  const lblEl = document.getElementById('lp-labels');
+  const rdEl  = document.getElementById('lp-roads');
+  const hnEl  = document.getElementById('lp-housenums');
+  if (lblEl) lblEl.checked = layerPrefs.showLabels;
+  if (rdEl)  rdEl.checked  = layerPrefs.showRoads;
+  if (hnEl)  hnEl.checked  = layerPrefs.showHouseNums;
+  const ovEl = document.getElementById('lp-overlays');
+  if (ovEl) ovEl.style.display = layerPrefs.basemap === 'sat' ? '' : 'none';
+}
+
+function setBasemap(mode) {
+  layerPrefs.basemap = mode;
+  applyLayerPrefs();
+  saveLayerPrefs();
+}
+
+function setOverlay(key, val) {
+  if (key === 'labels')    layerPrefs.showLabels    = val;
+  if (key === 'roads')     layerPrefs.showRoads     = val;
+  if (key === 'houseNums') layerPrefs.showHouseNums = val;
+  applyLayerPrefs();
+  saveLayerPrefs();
+}
+
+let _savePrefTimer;
+function saveLayerPrefs() {
+  clearTimeout(_savePrefTimer);
+  _savePrefTimer = setTimeout(() => api('PUT', '/preferences', layerPrefs), 400);
+}
+
+async function loadLayerPrefs() {
+  try {
+    const prefs = await api('GET', '/preferences');
+    if (prefs.basemap)             layerPrefs.basemap  = prefs.basemap;
+    if (prefs.showLabels    !== undefined) layerPrefs.showLabels    = prefs.showLabels;
+    if (prefs.showRoads     !== undefined) layerPrefs.showRoads     = prefs.showRoads;
+    if (prefs.showHouseNums !== undefined) layerPrefs.showHouseNums = prefs.showHouseNums;
+    if (prefs.mapLat  !== undefined) layerPrefs.mapLat  = prefs.mapLat;
+    if (prefs.mapLng  !== undefined) layerPrefs.mapLng  = prefs.mapLng;
+    if (prefs.mapZoom !== undefined) layerPrefs.mapZoom = prefs.mapZoom;
+    if (prefs.darkMode !== undefined) layerPrefs.darkMode = prefs.darkMode;
+  } catch (_) {}
+  map.setView([layerPrefs.mapLat, layerPrefs.mapLng], layerPrefs.mapZoom);
+  applyLayerPrefs();
+  applyDarkMode(layerPrefs.darkMode);
+}
+
+function applyDarkMode(dark) {
+  document.body.classList.toggle('dark-mode', !!dark);
+  localStorage.setItem('ofm-dark-mode', dark ? 'true' : 'false');
+  const el = document.getElementById('lp-dark');
+  if (el) el.checked = !!dark;
+}
+
+function setDarkMode(val) {
+  layerPrefs.darkMode = !!val;
+  applyDarkMode(layerPrefs.darkMode);
+  saveLayerPrefs();
+}
+
+function toggleViewsPanel() {
+  const p = document.getElementById('views-panel');
+  if (p.style.display === 'none') {
+    const btn = document.getElementById('btn-views');
+    const rect = btn.getBoundingClientRect();
+    p.style.left = rect.left + 'px';
+    p.style.display = '';
+    setTimeout(() => document.addEventListener('click', _closeLayers, { once: true }), 0);
+  } else {
+    p.style.display = 'none';
+  }
+}
+function _closeLayers(e) {
+  const p = document.getElementById('views-panel');
+  if (p && !p.contains(e.target)) p.style.display = 'none';
+  else if (p) setTimeout(() => document.addEventListener('click', _closeLayers, { once: true }), 0);
+}
+
+function toggleMapLayersPanel() {
+  _mapLayersPanelOpen = !_mapLayersPanelOpen;
+  document.getElementById('map-layers-panel').style.left = _mapLayersPanelOpen ? '0' : '-280px';
+  document.getElementById('map-layers-tab').textContent = _mapLayersPanelOpen ? '‹' : '›';
+  document.getElementById('toolbar').style.paddingLeft = _mapLayersPanelOpen ? '290px' : '';
+  document.getElementById('topbar').style.paddingLeft = _mapLayersPanelOpen ? '294px' : '';
+  if (_mapLayersPanelOpen) renderLayersPanel();
+}
+
+function closeMapLayersPanel() {
+  _mapLayersPanelOpen = false;
+  document.getElementById('map-layers-panel').style.left = '-280px';
+  document.getElementById('map-layers-tab').textContent = '›';
+  document.getElementById('toolbar').style.paddingLeft = '';
+  document.getElementById('topbar').style.paddingLeft = '';
+}
+
+let lastClickTime = 0;
+let lastClickLatLng = null;
+
+function onMapClick(e) {
+  if (state.mode === 'edit') { clearEditHandles(); return; }
+  if (state.mode === 'select' && state.selectedClosure) closePanel();
+  if (state.mode === 'delete') return;
+  if (state.mode === 'closure') {
+    let placeLatlng = e.latlng;
+    let snappedRouteId = null;
+    if (state.snapPoleId) {
+      const p = state.poles.find(p => p.id === state.snapPoleId);
+      if (p) { const [lng, lat] = p.geom.coordinates; placeLatlng = L.latLng(lat, lng); }
+    } else if (state.snapRouteId) {
+      placeLatlng = L.latLng(state.snapRoutePoint.lat, state.snapRoutePoint.lng);
+      snappedRouteId = state.snapRouteId;
+    }
+    const snappedPoleId = state.snapPoleId || null;
+    clearSnap();
+    promptCreateClosure(placeLatlng, snappedRouteId, snappedPoleId);
+  } else if (state.mode === 'pole') {
+    promptCreatePole(e.latlng);
+  } else if (state.mode === 'site') {
+    promptCreateSite(e.latlng, state.pendingSiteType);
+  } else if (state.mode === 'route') {
+    const now = Date.now();
+    // Double-click detection: same area, within 350ms = finish fiber
+    if (lastClickLatLng && (now - lastClickTime) < 350 &&
+        Math.abs(lastClickLatLng.lat - e.latlng.lat) < 0.0001 &&
+        Math.abs(lastClickLatLng.lng - e.latlng.lng) < 0.0001) {
+      if (state.routePoints.length >= 2) {
+        // Apply terminal snap to the last recorded point if one is active
+        if (state.snapClosureId) {
+          const cl = state.closures.find(c => c.id === state.snapClosureId);
+          if (cl) {
+            const [lng, lat] = cl.geom.coordinates;
+            const last = state.routePoints.length - 1;
+            state.routePoints[last] = [lat, lng];
+            state.routeSnapClosures[last] = cl.id;
+            // closure on a pole → implicitly attach that pole too
+            if (cl.pole_id && !state.drawAttachedPoles.includes(cl.pole_id)) {
+              state.drawAttachedPoles.push(cl.pole_id);
+            }
+          }
+        } else if (state.snapPoleId) {
+          const pole = state.poles.find(p => p.id === state.snapPoleId);
+          if (pole) {
+            const [lng, lat] = pole.geom.coordinates;
+            const last = state.routePoints.length - 1;
+            state.routePoints[last] = [lat, lng];
+            if (!state.drawAttachedPoles.includes(pole.id)) state.drawAttachedPoles.push(pole.id);
+          }
+        } else if (state.snapSiteId) {
+          const s = state.sites.find(s => s.id === state.snapSiteId);
+          if (s) {
+            const [lng, lat] = s.geom.coordinates;
+            const last = state.routePoints.length - 1;
+            state.routePoints[last] = [lat, lng];
+            state.routeSnapSites[last] = s.id;
+          }
+        }
+        const points = [...state.routePoints];
+        const snapsCopy = [...state.routeSnapClosures];
+        const sitesCopy = [...state.routeSnapSites];
+        const tempLine = state.routeLine;
+        state.routePoints = [];
+        state.routeSnapClosures = [];
+        state.routeSnapSites = [];
+        state.routeLine = null;
+        lastClickTime = 0;
+        lastClickLatLng = null;
+        promptCreateRoute(points, tempLine, snapsCopy, sitesCopy);
+      }
+      return;
+    }
+    // Normal click - snap to closure (first point only), pole, or site, then add point
+    lastClickTime = now;
+    let clickLatLng = e.latlng;
+    let closureSnappedId = null;
+    let siteSnappedId = null;
+    const isFirstPoint = (state.routePoints.length === 0);
+
+    if (state.snapClosureId && isFirstPoint) {
+      const cl = state.closures.find(c => c.id === state.snapClosureId);
+      if (cl) {
+        const [lng, lat] = cl.geom.coordinates;
+        clickLatLng = L.latLng(lat, lng);
+        closureSnappedId = cl.id;
+        // closure on a pole → implicitly attach that pole too
+        if (cl.pole_id && !state.drawAttachedPoles.includes(cl.pole_id)) {
+          state.drawAttachedPoles.push(cl.pole_id);
+        }
+      }
+    } else if (state.snapPoleId) {
+      const pole = state.poles.find(p => p.id === state.snapPoleId);
+      if (pole) {
+        const [lng, lat] = pole.geom.coordinates;
+        clickLatLng = L.latLng(lat, lng);
+        if (!state.drawAttachedPoles.includes(pole.id)) state.drawAttachedPoles.push(pole.id);
+      }
+    } else if (state.snapSiteId) {
+      const s = state.sites.find(s => s.id === state.snapSiteId);
+      if (s) {
+        const [lng, lat] = s.geom.coordinates;
+        clickLatLng = L.latLng(lat, lng);
+        siteSnappedId = s.id;
+      }
+    }
+
+    lastClickLatLng = clickLatLng;
+    state.routePoints.push([clickLatLng.lat, clickLatLng.lng]);
+    state.routeSnapClosures.push(closureSnappedId); // parallel to routePoints
+    state.routeSnapSites.push(siteSnappedId);       // parallel to routePoints
+    if (state.routeLine) map.removeLayer(state.routeLine);
+    state.routeLine = L.polyline(state.routePoints, { color: '#FF8800', weight: 3.5, opacity: 0.85 }).addTo(map);
+  }
+}
+
+function clearSnap() {
+  state.snapPoleId = null;
+  state.snapClosureId = null;
+  state.snapRouteId = null;
+  state.snapRoutePoint = null;
+  state.snapSiteId = null;
+  if (state.snapLayer) { map.removeLayer(state.snapLayer); state.snapLayer = null; }
+}
+
+function clearPreview() {
+  if (state.previewLine) { map.removeLayer(state.previewLine); state.previewLine = null; }
+}
+
+function clearHouseNums() {
+  houseNumMarkers.forEach(m => map.removeLayer(m));
+  houseNumMarkers = [];
+}
+
+function scheduleHouseNumFetch() {
+  if (!layerPrefs.showHouseNums) return;
+  if (_houseNumTimer) clearTimeout(_houseNumTimer);
+  _houseNumTimer = setTimeout(fetchHouseNums, 400);
+}
+
+function _addHouseNumLabel(lat, lon, num) {
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="font-size:10px;font-weight:700;color:#1a237e;background:rgba(255,255,255,0.85);padding:1px 4px;border-radius:2px;border:1px solid rgba(26,35,126,0.3);white-space:nowrap;line-height:1.4;pointer-events:none;">${h(num)}</div>`,
+    iconSize: null, iconAnchor: [0, 0]
+  });
+  houseNumMarkers.push(L.marker([lat, lon], { icon, interactive: false, zIndexOffset: -200 }).addTo(map));
+}
+
+function _interpAddressPoints(geometry, startNum, endNum, interpType) {
+  if (interpType === 'alphabetic') return [];
+  const s = parseInt(startNum), e = parseInt(endNum);
+  if (isNaN(s) || isNaN(e) || s === e) return [];
+  const step = (interpType === 'all') ? 1 : 2;
+  const lo = Math.min(s, e), hi = Math.max(s, e);
+  const count = Math.floor((hi - lo) / step) + 1;
+  if (count <= 2 || count > 500) return [];
+  // cumulative distance along geometry
+  const cum = [0];
+  for (let i = 1; i < geometry.length; i++) {
+    const a = geometry[i - 1], b = geometry[i];
+    cum.push(cum[i - 1] + Math.hypot(b.lat - a.lat, b.lon - a.lon));
+  }
+  const total = cum[cum.length - 1];
+  if (total === 0) return [];
+  const results = [];
+  // skip index 0 and count-1 — those are the endpoint nodes shown separately
+  for (let i = 1; i < count - 1; i++) {
+    const num = s + i * step * (e > s ? 1 : -1);
+    const frac = i / (count - 1);
+    const target = frac * total;
+    let si = geometry.length - 2;
+    for (let j = 0; j < cum.length - 1; j++) { if (cum[j + 1] >= target) { si = j; break; } }
+    const sf = (cum[si + 1] - cum[si]) > 0 ? (target - cum[si]) / (cum[si + 1] - cum[si]) : 0;
+    const a = geometry[si], b = geometry[si + 1];
+    results.push({ lat: a.lat + sf * (b.lat - a.lat), lon: a.lon + sf * (b.lon - a.lon), num: String(Math.abs(num)) });
+  }
+  return results;
+}
+
+async function fetchHouseNums() {
+  _houseNumTimer = null;
+  if (!layerPrefs.showHouseNums) { clearHouseNums(); return; }
+  if (map.getZoom() < 15) {
+    clearHouseNums();
+    const hnEl = document.getElementById('lp-housenums-hint');
+    if (hnEl) hnEl.style.display = '';
+    return;
+  }
+  const hnHint = document.getElementById('lp-housenums-hint');
+  if (hnHint) hnHint.style.display = 'none';
+  const b = map.getBounds();
+  const bbox = `${b.getSouth().toFixed(6)},${b.getWest().toFixed(6)},${b.getNorth().toFixed(6)},${b.getEast().toFixed(6)}`;
+  // Query individual address nodes/ways AND interpolation ways (with full geometry) plus their endpoint nodes
+  const q = `[out:json][timeout:20];
+(node["addr:housenumber"](${bbox});way["addr:housenumber"](${bbox});way["addr:interpolation"](${bbox});)->.main;
+node(w.main)["addr:housenumber"]->.endnodes;
+(.main;.endnodes;);
+out geom;`;
+  try {
+    const resp = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(q)
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    clearHouseNums();
+    if (!layerPrefs.showHouseNums) return;
+
+    // Build node lookup for interpolation endpoint house numbers
+    const nodeById = {};
+    data.elements.forEach(el => {
+      if (el.type === 'node' && el.tags?.['addr:housenumber']) {
+        nodeById[el.id] = { lat: el.lat, lon: el.lon, num: el.tags['addr:housenumber'] };
+      }
+    });
+
+    const seenNodes = new Set();
+    data.elements.forEach(el => {
+      if (el.type === 'node' && el.tags?.['addr:housenumber']) {
+        if (!seenNodes.has(el.id)) { seenNodes.add(el.id); _addHouseNumLabel(el.lat, el.lon, el.tags['addr:housenumber']); }
+      } else if (el.type === 'way' && el.tags?.['addr:housenumber'] && el.geometry?.length) {
+        // Building way — use centroid
+        const lat = el.geometry.reduce((s, n) => s + n.lat, 0) / el.geometry.length;
+        const lon = el.geometry.reduce((s, n) => s + n.lon, 0) / el.geometry.length;
+        _addHouseNumLabel(lat, lon, el.tags['addr:housenumber']);
+      } else if (el.type === 'way' && el.tags?.['addr:interpolation'] && el.nodes?.length && el.geometry?.length) {
+        // Interpolation way — compute individual house positions
+        const start = nodeById[el.nodes[0]], end = nodeById[el.nodes[el.nodes.length - 1]];
+        if (!start || !end) return;
+        const pts = _interpAddressPoints(el.geometry, start.num, end.num, el.tags['addr:interpolation']);
+        pts.forEach(pt => _addHouseNumLabel(pt.lat, pt.lon, pt.num));
+      }
+    });
+  } catch (_) {}
+}
+
+function clearEditSnap() {
+  state.editSnapPoleId = null;
+  if (state.editSnapLayer) { map.removeLayer(state.editSnapLayer); state.editSnapLayer = null; }
+}
+
+function checkEditSnap(latlng) {
+  const SNAP_PX = 20;
+  let closestPole = null, closestDist = Infinity;
+  const mapPt = map.latLngToContainerPoint(latlng);
+  state.poles.forEach(p => {
+    const [pLng, pLat] = p.geom.coordinates;
+    const pPt = map.latLngToContainerPoint([pLat, pLng]);
+    const dist = Math.hypot(mapPt.x - pPt.x, mapPt.y - pPt.y);
+    if (dist < SNAP_PX && dist < closestDist) { closestPole = p; closestDist = dist; }
+  });
+  if (closestPole) {
+    if (state.editSnapPoleId !== closestPole.id) {
+      clearEditSnap();
+      state.editSnapPoleId = closestPole.id;
+      const [pLng, pLat] = closestPole.geom.coordinates;
+      state.editSnapLayer = L.circleMarker([pLat, pLng], { radius: 11, color: '#1565c0', weight: 2.5, fill: false, opacity: 0.9 }).addTo(map);
+    }
+  } else {
+    clearEditSnap();
+  }
+}
+
+function clearEditHandles() {
+  state.editHandles.forEach(h => map.removeLayer(h));
+  state.editHandles = [];
+  state.editVertexPoints = [];
+  state.editingRouteId = null;
+  clearEditSnap();
+}
+
+function startEditRoute(routeId) {
+  clearEditHandles();
+  if (state.mode !== 'edit') return;
+  state.editingRouteId = routeId;
+  const route = state.routes.find(r => r.id === routeId);
+  if (!route) return;
+  state.editVertexPoints = route.geom.coordinates.map(c => [c[1], c[0]]); // store as [lat, lng]
+  state.editVertexPoints.forEach((pt, i) => {
+    const handleIcon = L.divIcon({
+      className: '',
+      html: '<div style="width:10px;height:10px;background:white;border:2px solid #1565c0;border-radius:50%;cursor:move;"></div>',
+      iconSize: [10, 10], iconAnchor: [5, 5]
+    });
+    const handle = L.marker(pt, { icon: handleIcon, draggable: true, zIndexOffset: 500 }).addTo(map);
+    handle.on('drag', (e) => {
+      state.editVertexPoints[i] = [e.latlng.lat, e.latlng.lng];
+      const routeLine = state.routeLayers[routeId];
+      if (routeLine) routeLine.setLatLngs(state.editVertexPoints);
+      checkEditSnap(e.latlng);
+    });
+    handle.on('dragend', async () => {
+      if (state.editSnapPoleId) {
+        const pole = state.poles.find(p => p.id === state.editSnapPoleId);
+        if (pole) {
+          const [pLng, pLat] = pole.geom.coordinates;
+          handle.setLatLng([pLat, pLng]);
+          state.editVertexPoints[i] = [pLat, pLng];
+          const routeLine = state.routeLayers[routeId];
+          if (routeLine) routeLine.setLatLngs(state.editVertexPoints);
+        }
+        clearEditSnap();
+      }
+      const points = state.editVertexPoints.map(pt => [pt[1], pt[0]]); // [lng, lat] for WKT
+      const route = state.routes.find(r => r.id === routeId);
+      if (route) {
+        try {
+          await api('PUT', '/routes/' + routeId, { name: route.name, notes: route.notes, fiber_count: route.fiber_count, color: route.color, attached_poles: route.attached_poles, points });
+          route.geom.coordinates = points;
+        } catch (err) { alert('Failed to save route position'); }
+      }
+    });
+    state.editHandles.push(handle);
+  });
+}
+
+function updatePreview(e) {
+  if (!state.routePoints.length) { clearPreview(); return; }
+  let targetLatLng = e.latlng;
+  if (state.snapClosureId) {
+    const cl = state.closures.find(c => c.id === state.snapClosureId);
+    if (cl) { const [lng, lat] = cl.geom.coordinates; targetLatLng = L.latLng(lat, lng); }
+  } else if (state.snapPoleId) {
+    const pole = state.poles.find(p => p.id === state.snapPoleId);
+    if (pole) { const [lng, lat] = pole.geom.coordinates; targetLatLng = L.latLng(lat, lng); }
+  } else if (state.snapSiteId) {
+    const s = state.sites.find(s => s.id === state.snapSiteId);
+    if (s) { const [lng, lat] = s.geom.coordinates; targetLatLng = L.latLng(lat, lng); }
+  }
+  const last = state.routePoints[state.routePoints.length - 1];
+  const coords = [last, targetLatLng];
+  if (state.previewLine) {
+    state.previewLine.setLatLngs(coords);
+  } else {
+    state.previewLine = L.polyline(coords, { color: '#FF8800', weight: 2.5, opacity: 0.55, dashArray: '7,5' }).addTo(map);
+  }
+}
+
+function onMapMouseMove(e) {
+  if (state.mode === 'delete') {
+    if (state.dragStart) {
+      const bounds = L.latLngBounds(state.dragStart, e.latlng);
+      if (state.selectRect) {
+        state.selectRect.setBounds(bounds);
+      } else {
+        state.selectRect = L.rectangle(bounds, {
+          color: '#e53935', weight: 2, fillColor: '#e53935', fillOpacity: 0.08, dashArray: '6,4'
+        }).addTo(map);
+      }
+    }
+    return;
+  }
+  if (state.mode !== 'route' && state.mode !== 'closure') { clearSnap(); return; }
+  const SNAP_PX = 20;
+  const cursorPx = map.latLngToContainerPoint(e.latlng);
+
+  if (state.mode === 'closure') {
+    // Pole snap takes priority
+    let closestPole = null, closestPoleDist = Infinity;
+    state.poles.forEach(p => {
+      const [lng, lat] = p.geom.coordinates;
+      const dist = map.latLngToContainerPoint([lat, lng]).distanceTo(cursorPx);
+      if (dist < SNAP_PX && dist < closestPoleDist) { closestPole = p; closestPoleDist = dist; }
+    });
+    if (closestPole) {
+      if (state.snapPoleId !== closestPole.id) {
+        clearSnap();
+        const [lng, lat] = closestPole.geom.coordinates;
+        state.snapPoleId = closestPole.id;
+        state.snapLayer = L.circleMarker([lat, lng], { radius: 11, color: '#1565c0', weight: 2.5, fill: false, opacity: 0.9 }).addTo(map);
+      }
+      return;
+    }
+
+    // Route snap (only when no pole nearby)
+    let bestRoute = null, bestDist = Infinity, bestLat = 0, bestLng = 0;
+    state.routes.forEach(r => {
+      const coords = r.geom.coordinates; // [lng, lat] pairs
+      for (let i = 0; i < coords.length - 1; i++) {
+        const A = map.latLngToContainerPoint([coords[i][1],   coords[i][0]]);
+        const B = map.latLngToContainerPoint([coords[i+1][1], coords[i+1][0]]);
+        const { point, t } = closestPointOnSegmentPx(A, B, cursorPx);
+        const dist = cursorPx.distanceTo(point);
+        if (dist < SNAP_PX && dist < bestDist) {
+          bestDist = dist;
+          bestRoute = r;
+          bestLat = coords[i][1] + t * (coords[i+1][1] - coords[i][1]);
+          bestLng = coords[i][0] + t * (coords[i+1][0] - coords[i][0]);
+        }
+      }
+    });
+    if (bestRoute) {
+      const changed = state.snapRouteId !== bestRoute.id ||
+        Math.abs((state.snapRoutePoint?.lat ?? 0) - bestLat) > 0.000001;
+      if (changed) {
+        clearSnap();
+        state.snapRouteId = bestRoute.id;
+        state.snapRoutePoint = { lat: bestLat, lng: bestLng };
+        state.snapLayer = L.circleMarker([bestLat, bestLng], { radius: 11, color: '#1565c0', weight: 2.5, fill: false, opacity: 0.9 }).addTo(map);
+      }
+    } else {
+      clearSnap();
+    }
+    return;
+  }
+
+  // Route mode: closure snap takes priority over pole snap
+  let closestClosure = null, closestClosureDist = Infinity;
+  state.closures.forEach(c => {
+    const [lng, lat] = c.geom.coordinates;
+    const dist = map.latLngToContainerPoint([lat, lng]).distanceTo(cursorPx);
+    if (dist < SNAP_PX && dist < closestClosureDist) { closestClosure = c; closestClosureDist = dist; }
+  });
+  if (closestClosure) {
+    if (state.snapClosureId !== closestClosure.id) {
+      clearSnap();
+      const [lng, lat] = closestClosure.geom.coordinates;
+      state.snapClosureId = closestClosure.id;
+      state.snapLayer = L.circleMarker([lat, lng], { radius: 13, color: '#E65100', weight: 2.5, dashArray: '5,4', fill: false, opacity: 0.9 }).addTo(map);
+    }
+    updatePreview(e);
+    return;
+  }
+
+  // Pole snap (only when no closure nearby)
+  let closestPole = null, closestPoleDist = Infinity;
+  state.poles.forEach(p => {
+    const [lng, lat] = p.geom.coordinates;
+    const dist = map.latLngToContainerPoint([lat, lng]).distanceTo(cursorPx);
+    if (dist < SNAP_PX && dist < closestPoleDist) { closestPole = p; closestPoleDist = dist; }
+  });
+  if (closestPole) {
+    if (state.snapPoleId !== closestPole.id) {
+      clearSnap();
+      const [lng, lat] = closestPole.geom.coordinates;
+      state.snapPoleId = closestPole.id;
+      state.snapLayer = L.circleMarker([lat, lng], { radius: 11, color: '#1565c0', weight: 2.5, fill: false, opacity: 0.9 }).addTo(map);
+    }
+    updatePreview(e);
+    return;
+  }
+
+  // Site snap (lowest priority — only when no closure or pole nearby)
+  let closestSite = null, closestSiteDist = Infinity;
+  state.sites.forEach(s => {
+    const [lng, lat] = s.geom.coordinates;
+    const dist = map.latLngToContainerPoint([lat, lng]).distanceTo(cursorPx);
+    if (dist < SNAP_PX && dist < closestSiteDist) { closestSite = s; closestSiteDist = dist; }
+  });
+  if (closestSite) {
+    if (state.snapSiteId !== closestSite.id) {
+      clearSnap();
+      const [lng, lat] = closestSite.geom.coordinates;
+      state.snapSiteId = closestSite.id;
+      state.snapLayer = L.circleMarker([lat, lng], { radius: 16, color: '#6a1b9a', weight: 2.5, fill: false, opacity: 0.9 }).addTo(map);
+    }
+  } else {
+    clearSnap();
+  }
+  updatePreview(e);
+}
+
+const _PLACEMENT_TYPES = { closure: 'closure', route: 'route', pole: 'pole', site: 'site' };
+
+function getActiveLayer() {
+  if (state.activeLayerId === null) return null;
+  for (const g of state.layerGroups) {
+    const l = (g.layers || []).find(l => l.id === state.activeLayerId);
+    if (l) return l;
+  }
+  return null;
+}
+
+function setActiveLayer(id) {
+  state.activeLayerId = (state.activeLayerId === id) ? null : id;
+  updateActiveLayerLabel();
+  updateToolbarRestrictions();
+  renderLayersPanel();
+}
+
+function updateActiveLayerLabel() {
+  const el = document.getElementById('active-layer-label');
+  if (!el) return;
+  const layer = getActiveLayer();
+  if (layer) {
+    el.textContent = 'Layer: ' + layer.name;
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function updateToolbarRestrictions() {
+  const BTN_TYPES = { 'btn-closure': 'closure', 'btn-route': 'route', 'btn-pole': 'pole', 'btn-site': 'site' };
+  const activeLayer = getActiveLayer();
+  for (const [btnId, type] of Object.entries(BTN_TYPES)) {
+    const blocked = activeLayer?.allowed_types?.length > 0 && !activeLayer.allowed_types.includes(type);
+    document.getElementById(btnId)?.classList.toggle('layer-blocked', !!blocked);
+  }
+}
+
+function showLayerBlockMessage(type, layerName) {
+  const el = document.getElementById('mode-hint');
+  const prev = el.textContent;
+  el.style.color = '#c62828';
+  el.textContent = `Layer "${layerName}" only allows: ${getActiveLayer().allowed_types.join(', ')}`;
+  setTimeout(() => { el.style.color = ''; el.textContent = prev; }, 2500);
+}
+
+// ============ SEARCH ============
+function onSearchInput() {
+  const q = document.getElementById('search-input').value.trim();
+  if (_searchTimer) clearTimeout(_searchTimer);
+  if (_searchAbort) { _searchAbort.abort(); _searchAbort = null; }
+  if (q.length < 2) { _geoResults = []; hideSearchResults(); return; }
+  renderSearchResults(q);
+  _searchTimer = setTimeout(() => fetchGeoSearch(q), 200);
+}
+
+function onSearchKeydown(e) {
+  if (e.key === 'Escape') { hideSearchResults(); e.target.value = ''; e.target.blur(); }
+}
+
+function renderSearchResults(q) {
+  q = q != null ? q : document.getElementById('search-input').value.trim();
+  if (q.length < 2) { hideSearchResults(); return; }
+  const lq = q.toLowerCase();
+  const poles    = state.poles.filter(p => p.name.toLowerCase().includes(lq)).slice(0, 6);
+  const closures = state.closures.filter(c => c.name.toLowerCase().includes(lq)).slice(0, 6);
+  let html = '';
+  if (poles.length) {
+    html += '<div class="sr-hdr">Poles</div>';
+    poles.forEach(p => {
+      html += `<div class="sr-item" onclick="pickSearchResult('pole',${p.id})"><span class="sr-badge sr-badge-pole">Pole</span><span class="sr-name">${h(p.name)}</span></div>`;
+    });
+  }
+  if (closures.length) {
+    html += '<div class="sr-hdr">Closures</div>';
+    closures.forEach(c => {
+      html += `<div class="sr-item" onclick="pickSearchResult('closure',${c.id})"><span class="sr-badge sr-badge-closure">Closure</span><span class="sr-name">${h(c.name)}</span></div>`;
+    });
+  }
+  if (_geoResults.length) {
+    let nearbyShown = false, otherShown = false;
+    _geoResults.forEach((r, i) => {
+      if ( r._isLocal && !nearbyShown) { html += '<div class="sr-hdr">Nearby</div>';          nearbyShown = true; }
+      if (!r._isLocal && !otherShown)  { html += '<div class="sr-hdr">Other locations</div>'; otherShown  = true; }
+      const label = r.display_name.split(',').slice(0, 3).join(', ');
+      html += `<div class="sr-item" onclick="pickSearchResult('addr',${i})"><span class="sr-badge sr-badge-addr">Address</span><span class="sr-name">${h(label)}</span></div>`;
+    });
+  }
+  if (!html) html = '<div class="sr-empty">No results</div>';
+  const el = document.getElementById('search-results');
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function geoCountryCode(lat, lng) {
+  if (lat >= 24 && lat <= 50 && lng >= -125 && lng <= -66) return 'us';
+  if (lat >= 42 && lat <= 84 && lng >= -141 && lng <= -52) return 'ca';
+  if (lat >= 50 && lat <= 62 && lng >= -11 && lng <=   2) return 'gb,ie';
+  return '';
+}
+
+// Reverse-geocode map center to get the current state/province bounding box.
+// Called on moveend (debounced) so search stays pinned to the current admin area.
+function scheduleGeoContext() {
+  if (_geoCtxTimer) clearTimeout(_geoCtxTimer);
+  _geoCtxTimer = setTimeout(refreshGeoContext, 2500);
+}
+
+async function refreshGeoContext() {
+  const center = map.getCenter();
+  const mapZoom = map.getZoom();
+  const cc = geoCountryCode(center.lat, center.lng);
+
+  // Pick Nominatim reverse-geocode zoom based on how closely the user is viewing:
+  //   map zoom 14+ → city/town (revZoom 10)
+  //   map zoom 10–13 → county   (revZoom  8)
+  //   map zoom  7–9  → state    (revZoom  5)
+  //   map zoom  < 7  → country only, no bounded restriction
+  let revZoom;
+  if      (mapZoom >= 14) revZoom = 10;
+  else if (mapZoom >= 10) revZoom = 8;
+  else if (mapZoom >=  7) revZoom = 5;
+  else                  { _geoContext = { vb: null, cc }; return; }
+
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${center.lat.toFixed(4)}&lon=${center.lng.toFixed(4)}&zoom=${revZoom}&format=json`,
+      { headers: { 'Accept-Language': 'en' } }
+    );
+    const data = await r.json();
+    if (data.boundingbox) {
+      const [s, n, w, e] = data.boundingbox;
+      _geoContext = { vb: `${w},${n},${e},${s}`, cc };
+    } else {
+      _geoContext = { vb: null, cc };
+    }
+  } catch (_) {
+    _geoContext = { vb: null, cc };
+  }
+}
+
+async function fetchGeoSearch(q) {
+  if (_searchAbort) _searchAbort.abort();
+  _searchAbort = new AbortController();
+  const sig = _searchAbort.signal;
+
+  const center = map.getCenter();
+  const opts = { signal: sig, headers: { 'Accept-Language': 'en' } };
+
+  // Use the state bounding box if we have it; otherwise fall back to a 4× viewport expansion
+  let vb, bounded;
+  if (_geoContext?.vb) {
+    vb      = _geoContext.vb;
+    bounded = '&bounded=1';
+  } else {
+    const b = map.getBounds();
+    const latSpan = (b.getNorth() - b.getSouth()) * 2;
+    const lngSpan = (b.getEast()  - b.getWest())  * 2;
+    vb      = `${(center.lng - lngSpan).toFixed(4)},${(center.lat + latSpan).toFixed(4)},${(center.lng + lngSpan).toFixed(4)},${(center.lat - latSpan).toFixed(4)}`;
+    bounded = '';
+  }
+
+  const cc = _geoContext?.cc ?? geoCountryCode(center.lat, center.lng);
+  let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=8&viewbox=${vb}${bounded}&addressdetails=0`;
+  if (cc) url += `&countrycodes=${cc}`;
+
+  try {
+    const resp = await fetch(url, opts);
+    if (sig.aborted) return;
+    const results = resp.ok ? await resp.json() : [];
+    if (sig.aborted) return;
+
+    // Sort by distance; mark as local if within the current viewport (not the full state bbox)
+    const b = map.getBounds();
+    results.forEach(r => {
+      const rlat = parseFloat(r.lat), rlon = parseFloat(r.lon);
+      r._dist    = Math.hypot(rlat - center.lat, rlon - center.lng);
+      r._isLocal = b.contains([rlat, rlon]);
+    });
+    results.sort((a, b) => a._dist - b._dist);
+
+    _geoResults = results;
+    renderSearchResults();
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('geo search error', e);
+  }
+}
+
+function pickSearchResult(type, idx) {
+  const geoResult = type === 'addr' ? _geoResults[idx] : null;
+  hideSearchResults();
+  document.getElementById('search-input').value = '';
+  if (type === 'pole') {
+    const p = state.poles.find(x => x.id === idx);
+    if (!p) return;
+    const [lng, lat] = p.geom.coordinates;
+    map.setView([lat, lng], 18);
+    handlePoleClick(idx);
+  } else if (type === 'closure') {
+    const c = state.closures.find(x => x.id === idx);
+    if (!c) return;
+    const [lng, lat] = c.geom.coordinates;
+    map.setView([lat, lng], 18);
+    openClosurePanel(idx);
+  } else if (type === 'addr') {
+    if (!geoResult) return;
+    if (geoResult.boundingbox) {
+      const [s, n, w, e] = geoResult.boundingbox.map(parseFloat);
+      map.fitBounds([[s, w], [n, e]], { maxZoom: 17 });
+    } else {
+      map.flyTo([parseFloat(geoResult.lat), parseFloat(geoResult.lon)], 17);
+    }
+  }
+}
+
+function hideSearchResults() {
+  const el = document.getElementById('search-results');
+  if (el) el.style.display = 'none';
+  _geoResults = [];
+}
+
+// ============ KML / KMZ IMPORT ============
+async function onImportFileChosen(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  let kmlText;
+  try {
+    if (file.name.toLowerCase().endsWith('.kmz')) {
+      const zip = await JSZip.loadAsync(file);
+      const entry = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.kml'));
+      if (!entry) throw new Error('No .kml found inside KMZ');
+      kmlText = await zip.files[entry].async('text');
+    } else {
+      kmlText = await file.text();
+    }
+  } catch (e) { alert('Could not read file: ' + e.message); return; }
+  const parsed = parseKMLFeatures(kmlText);
+  showImportConfigModal(parsed, file.name);
+}
+
+function parseKMLFeatures(kmlText) {
+  const doc = new DOMParser().parseFromString(kmlText, 'text/xml');
+  const points = [], lines = [];
+  let skippedPolygons = 0;
+  const ptExtSet = new Set(), lnExtSet = new Set();
+  doc.querySelectorAll('Placemark').forEach(pm => {
+    const name = pm.querySelector('name')?.textContent?.trim() || '';
+    const desc = pm.querySelector('description')?.textContent?.trim() || '';
+    const fields = {};
+    pm.querySelectorAll('ExtendedData Data').forEach(d => {
+      const k = d.getAttribute('name');
+      const v = d.querySelector('value')?.textContent?.trim() || '';
+      if (k) fields[k] = v;
+    });
+    pm.querySelectorAll('SimpleData').forEach(d => {
+      const k = d.getAttribute('name');
+      const v = d.textContent?.trim() || '';
+      if (k) fields[k] = v;
+    });
+    const ptEl = pm.querySelector('Point coordinates');
+    if (ptEl) {
+      const parts = ptEl.textContent.trim().split(',');
+      const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        points.push({ name, desc, fields, lat, lng });
+        Object.keys(fields).forEach(k => ptExtSet.add(k));
+      }
+      return;
+    }
+    const lsEls = pm.querySelectorAll('LineString coordinates');
+    lsEls.forEach(lsEl => {
+      const coords = lsEl.textContent.trim().split(/\s+/).map(c => {
+        const p = c.split(',');
+        return [parseFloat(p[0]), parseFloat(p[1])];
+      }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+      if (coords.length >= 2) {
+        lines.push({ name, desc, fields, coords });
+        Object.keys(fields).forEach(k => lnExtSet.add(k));
+      }
+    });
+    if (lsEls.length) return;
+    if (pm.querySelector('Polygon')) skippedPolygons++;
+  });
+  return { points, lines, skippedPolygons, ptExtFields: [...ptExtSet], lnExtFields: [...lnExtSet] };
+}
+
+function stripHTML(str) {
+  const d = document.createElement('div');
+  d.innerHTML = str;
+  return (d.textContent || d.innerText || '').trim();
+}
+
+function buildFieldMappingHTML(parsed, scope) {
+  // scope: 'pt' for points, 'ln' for lines
+  const isPt = scope === 'pt';
+  const feats = isPt ? parsed.points : parsed.lines;
+  const extFields = isPt ? parsed.ptExtFields : parsed.lnExtFields;
+  const hasDesc = feats.some(f => f.desc);
+  const fields = ['name', ...(hasDesc ? ['description'] : []), ...extFields];
+  if (!fields.length) return '';
+
+  const ptOptDefs = [
+    ['feature_name',  'Both names'],
+    ['pole_name',     'Pole name'],
+    ['closure_name',  'Closure name'],
+    ['notes',         'Notes (both)'],
+    ['pole_notes',    'Pole notes'],
+    ['closure_notes', 'Closure notes'],
+    ['fiber_count',   'Fiber count'],
+    ['ignore',        'Ignore'],
+  ];
+  const lnOptDefs = [
+    ['feature_name',  'Route name'],
+    ['notes',         'Notes'],
+    ['fiber_count',   'Fiber count'],
+    ['ignore',        'Ignore'],
+  ];
+  const optDefs = isPt ? ptOptDefs : lnOptDefs;
+
+  const rows = fields.map(f => {
+    let def = 'ignore';
+    if (f === 'name')        def = 'feature_name';
+    if (f === 'description') def = 'notes';
+    const fl = f.toLowerCase();
+    if (def === 'ignore') {
+      if (/fiber|strand|cable|count/.test(fl)) def = 'fiber_count';
+      else if (/note|comment/.test(fl))        def = 'notes';
+    }
+    const opts = optDefs.map(([v, lbl]) =>
+      `<option value="${v}"${v === def ? ' selected' : ''}>${lbl}</option>`
+    ).join('');
+    return `<tr>
+      <td style="padding:3px 10px 3px 0;white-space:nowrap;font-size:12px">${h(f)}</td>
+      <td><select class="imp-field-map" data-field="${h(f)}" data-scope="${scope}"
+          style="width:100%;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px">
+        ${opts}
+      </select></td></tr>`;
+  }).join('');
+
+  const label = isPt ? 'Map point fields' : 'Map line fields';
+  return `<div style="margin-bottom:14px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:#555">${label}</div>
+    <table style="width:100%;border-collapse:collapse">${rows}</table>
+  </div>`;
+}
+
+function applyFieldMapping(feat, mapping) {
+  const vals = { name: feat.name || '', description: feat.desc || '', ...(feat.fields || {}) };
+  let featureName = null, poleName = null, closureName = null;
+  let poleNotes = null, closureNotes = null;
+  let fiberCount = null;
+  for (const [kmlField, target] of Object.entries(mapping)) {
+    const raw = (vals[kmlField] || '').trim();
+    if (!raw || target === 'ignore') continue;
+    const val = kmlField === 'description' ? stripHTML(raw) : raw;
+    if      (target === 'feature_name')  { featureName = val; poleName = val; closureName = val; }
+    else if (target === 'pole_name')       poleName    = val;
+    else if (target === 'closure_name')    closureName = val;
+    else if (target === 'notes')         { poleNotes = poleNotes ? poleNotes + '\n' + val : val;
+                                           closureNotes = closureNotes ? closureNotes + '\n' + val : val; }
+    else if (target === 'pole_notes')      poleNotes    = poleNotes    ? poleNotes    + '\n' + val : val;
+    else if (target === 'closure_notes')   closureNotes = closureNotes ? closureNotes + '\n' + val : val;
+    else if (target === 'fiber_count')   { const n = parseInt(val); if (!isNaN(n)) fiberCount = n; }
+  }
+  return { featureName, poleName, closureName, poleNotes, closureNotes, fiberCount };
+}
+
+function randomPoleName() {
+  return 'P-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+function showImportConfigModal(parsed, filename) {
+  const { points, lines, skippedPolygons } = parsed;
+  if (!points.length && !lines.length) {
+    alert(`No importable features found in "${filename}".${skippedPolygons ? ` (${skippedPolygons} polygon(s) skipped — not supported)` : ''}`);
+    return;
+  }
+  _pendingImport = {
+    parsed,
+    groupName: filename.replace(/\.(kmz|kml)$/i, '') + ' - Imported',
+  };
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal" style="width:480px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">
+      <div class="modal-body">
+        <h3 style="margin:0 0 4px">Import from ${h(filename)}</h3>
+        <p style="font-size:12px;color:#888;margin:0 0 14px">Will be saved into a new layer group: <strong>${h(_pendingImport.groupName)}</strong></p>
+
+        ${points.length ? `
+        <div style="margin-bottom:12px">
+          <strong>📍 ${points.length} point${points.length !== 1 ? 's' : ''}</strong> — import as:
+          <div class="import-assign-row" style="flex-wrap:wrap">
+            <label><input type="radio" name="pt-type" value="pole" checked> Poles</label>
+            <label><input type="radio" name="pt-type" value="closure"> Closures</label>
+            <label><input type="radio" name="pt-type" value="pole_closure"> Pole + Closure</label>
+            <label><input type="radio" name="pt-type" value="skip"> Skip</label>
+          </div>
+        </div>` : ''}
+
+        ${lines.length ? `
+        <div style="margin-bottom:12px">
+          <strong>📏 ${lines.length} line${lines.length !== 1 ? 's' : ''}</strong> — import as:
+          <div class="import-assign-row">
+            <label><input type="radio" name="ln-type" value="route" checked> Fiber Routes</label>
+            <label><input type="radio" name="ln-type" value="skip"> Skip</label>
+          </div>
+          <div style="display:flex;gap:14px;margin-top:6px;font-size:12px;align-items:center">
+            Default fibers: <input type="number" id="imp-fcount" value="12" min="1" max="9999" style="width:60px;padding:3px 6px;border:1px solid #ccc;border-radius:4px">
+            Color: <input type="color" id="imp-color" value="#FF8800" style="width:36px;height:24px;border:none;cursor:pointer">
+          </div>
+        </div>` : ''}
+
+        ${skippedPolygons ? `<p style="font-size:12px;color:#888;margin:4px 0 10px">ℹ ${skippedPolygons} polygon(s) skipped (not supported)</p>` : ''}
+
+        ${points.length ? buildFieldMappingHTML(parsed, 'pt') : ''}
+        ${lines.length  ? buildFieldMappingHTML(parsed, 'ln') : ''}
+
+        <div id="imp-progress-wrap" style="display:none">
+          <div class="import-progress-wrap"><div class="import-progress-bar" id="imp-bar"></div></div>
+          <div id="imp-progress-label" style="font-size:12px;color:#555;text-align:center;margin-bottom:6px"></div>
+        </div>
+
+        <div class="btn-row" id="imp-btn-row">
+          <button class="btn-secondary" onclick="this.closest('.modal-bg').remove(); _pendingImport = null;">Cancel</button>
+          <button class="btn-primary" onclick="startImport(this)">
+            Import ${points.length + lines.length} features
+          </button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', () => { bg.remove(); _pendingImport = null; });
+}
+
+async function startImport(btn) {
+  const { parsed, groupName } = _pendingImport;
+  const modal = btn.closest('.modal');
+  const ptType = modal.querySelector('input[name="pt-type"]:checked')?.value ?? 'skip';
+  const lnType = modal.querySelector('input[name="ln-type"]:checked')?.value ?? 'skip';
+  const fCount = parseInt(modal.querySelector('#imp-fcount')?.value) || 12;
+  const color  = modal.querySelector('#imp-color')?.value || '#FF8800';
+  const ptMapping = {}, lnMapping = {};
+  modal.querySelectorAll('.imp-field-map').forEach(sel => {
+    if (sel.dataset.scope === 'pt') ptMapping[sel.dataset.field] = sel.value;
+    else                            lnMapping[sel.dataset.field] = sel.value;
+  });
+
+  const toImport = [
+    ...(ptType !== 'skip' ? parsed.points.map(p => ({ ...p, _type: ptType })) : []),
+    ...(lnType !== 'skip' ? parsed.lines.map(l => ({ ...l, _type: 'route'  })) : []),
+  ];
+  if (!toImport.length) { btn.closest('.modal-bg').remove(); return; }
+
+  modal.querySelector('#imp-btn-row').style.display = 'none';
+  modal.querySelector('#imp-progress-wrap').style.display = 'block';
+  const bar = modal.querySelector('#imp-bar');
+  const lbl = modal.querySelector('#imp-progress-label');
+  const setProgress = (n) => {
+    bar.style.width = Math.round(n / toImport.length * 100) + '%';
+    lbl.textContent = `${n} / ${toImport.length}`;
+  };
+  setProgress(0);
+
+  let layerId;
+  try {
+    const grp = await api('POST', '/layer-groups', { name: groupName });
+    state.layerGroups.push({ ...grp, layers: [] });
+    const lyr = await api('POST', `/layer-groups/${grp.id}/layers`, {
+      name: 'Imported Features',
+      allowed_types: ['pole', 'closure', 'route'],
+    });
+    layerId = lyr.id;
+    state.layerGroups.find(g => g.id === grp.id).layers.push(lyr);
+  } catch (e) {
+    alert('Failed to create import layer: ' + e.message);
+    btn.closest('.modal-bg').remove();
+    return;
+  }
+
+  let done = 0, errors = 0;
+  for (const feat of toImport) {
+    const mapped = applyFieldMapping(feat, feat._type === 'route' ? lnMapping : ptMapping);
+    const fc = mapped.fiberCount ?? fCount;
+    try {
+      if (feat._type === 'pole') {
+        const name = (mapped.poleName ?? mapped.featureName ?? feat.name) || randomPoleName();
+        const p = await api('POST', '/poles', { name, notes: mapped.poleNotes ?? mapped.closureNotes, lat: feat.lat, lng: feat.lng, layer_id: layerId });
+        p.geom = typeof p.geom === 'string' ? JSON.parse(p.geom) : p.geom;
+        state.poles.push(p);
+      } else if (feat._type === 'closure') {
+        const name = (mapped.closureName ?? mapped.featureName ?? feat.name) || 'Closure';
+        const c = await api('POST', '/closures', { name, notes: mapped.closureNotes ?? mapped.poleNotes, lat: feat.lat, lng: feat.lng, layer_id: layerId });
+        c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
+        if (!c.cables) c.cables = [];
+        state.closures.push(c);
+      } else if (feat._type === 'pole_closure') {
+        const pName = mapped.poleName ?? randomPoleName();
+        const cName = (mapped.closureName ?? mapped.featureName ?? feat.name) || 'Closure';
+        const p = await api('POST', '/poles', { name: pName, notes: mapped.poleNotes, lat: feat.lat, lng: feat.lng, layer_id: layerId });
+        p.geom = typeof p.geom === 'string' ? JSON.parse(p.geom) : p.geom;
+        state.poles.push(p);
+        const c = await api('POST', '/closures', { name: cName, notes: mapped.closureNotes, lat: feat.lat, lng: feat.lng, pole_id: p.id, layer_id: layerId });
+        c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
+        if (!c.cables) c.cables = [];
+        state.closures.push(c);
+      } else if (feat._type === 'route') {
+        const name = (mapped.featureName ?? feat.name) || 'Route';
+        const r = await api('POST', '/routes', { name, notes: mapped.poleNotes ?? mapped.closureNotes, points: feat.coords, fiber_count: fc, color, attached_poles: [], layer_id: layerId });
+        r.geom = typeof r.geom === 'string' ? JSON.parse(r.geom) : r.geom;
+        state.routes.push(r);
+      }
+    } catch (e) { console.warn('Import error for', feat.name, e); errors++; }
+    done++;
+    setProgress(done);
+  }
+
+  renderMap();
+  renderLayersPanel();
+  btn.closest('.modal-bg').remove();
+  _pendingImport = null;
+  const msg = errors
+    ? `Imported ${done - errors} of ${done} features (${errors} error${errors !== 1 ? 's' : ''} — see console)`
+    : `Imported ${done} feature${done !== 1 ? 's' : ''} into "${groupName}".`;
+  alert(msg);
+}
+
+function setMode(m) {
+  if (state.selectRect) { map.removeLayer(state.selectRect); state.selectRect = null; }
+  state.dragStart = null;
+  if (map) map.dragging.enable();
+  const wasEdit = state.mode === 'edit';
+  if (wasEdit) { clearEditHandles(); clearEditSnap(); }
+  // Check layer restriction for placement modes
+  if (_PLACEMENT_TYPES[m]) {
+    const activeLayer = getActiveLayer();
+    if (activeLayer?.allowed_types?.length > 0 && !activeLayer.allowed_types.includes(_PLACEMENT_TYPES[m])) {
+      showLayerBlockMessage(m, activeLayer.name);
+      return;
+    }
+  }
+  // If we're switching away from route mode and have points, auto-finish
+  if (state.mode === 'route' && m !== 'route' && state.routePoints.length >= 2) {
+    if (state.snapClosureId) {
+      const cl = state.closures.find(c => c.id === state.snapClosureId);
+      if (cl) {
+        const [lng, lat] = cl.geom.coordinates;
+        const last = state.routePoints.length - 1;
+        state.routePoints[last] = [lat, lng];
+        state.routeSnapClosures[last] = cl.id;
+        if (cl.pole_id && !state.drawAttachedPoles.includes(cl.pole_id)) {
+          state.drawAttachedPoles.push(cl.pole_id);
+        }
+      }
+    } else if (state.snapPoleId) {
+      const pole = state.poles.find(p => p.id === state.snapPoleId);
+      if (pole) {
+        const [lng, lat] = pole.geom.coordinates;
+        const last = state.routePoints.length - 1;
+        state.routePoints[last] = [lat, lng];
+        if (!state.drawAttachedPoles.includes(pole.id)) state.drawAttachedPoles.push(pole.id);
+      }
+    } else if (state.snapSiteId) {
+      const s = state.sites.find(s => s.id === state.snapSiteId);
+      if (s) {
+        const [lng, lat] = s.geom.coordinates;
+        const last = state.routePoints.length - 1;
+        state.routePoints[last] = [lat, lng];
+        state.routeSnapSites[last] = s.id;
+      }
+    }
+    const snapsCopy = [...state.routeSnapClosures];
+    const sitesCopy = [...state.routeSnapSites];
+    promptCreateRoute([...state.routePoints], null, snapsCopy, sitesCopy);
+    if (state.routeLine) { map.removeLayer(state.routeLine); state.routeLine = null; }
+    state.routePoints = [];
+    state.routeSnapClosures = [];
+    state.routeSnapSites = [];
+  } else {
+    state.routePoints = [];
+    state.routeSnapClosures = [];
+    state.routeSnapSites = [];
+    if (state.routeLine) { map.removeLayer(state.routeLine); state.routeLine = null; }
+  }
+  state.drawAttachedPoles = [];
+  clearSnap();
+  clearPreview();
+  state.mode = m;
+  document.querySelectorAll('.tb').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + m).classList.add('active');
+  const hints = {
+    select: 'Click a closure to view splices',
+    closure: 'Click on the map to place a splice closure',
+    route: 'Click points to draw fiber, double-click or switch tools to finish',
+    pole: 'Click on the map to place a pole',
+    site: 'Click on the map to place the site',
+    delete: 'Drag a rectangle to select and delete items',
+    edit: 'Drag poles and closures to move; click a fiber route to edit vertices'
+  };
+  document.getElementById('mode-hint').textContent = hints[m] || '';
+  if (map) map.getContainer().style.cursor = (m === 'select' || m === 'edit') ? '' : 'crosshair';
+  if (m === 'edit' || wasEdit) renderMap();
+}
+
+// ============ DATA LOADING ============
+async function loadData() {
+  try {
+    const [closures, routes, poles, fieldDefs, sites, layerGroups] = await Promise.all([
+      api('GET', '/closures'),
+      api('GET', '/routes'),
+      api('GET', '/poles'),
+      api('GET', '/field-defs'),
+      api('GET', '/sites'),
+      api('GET', '/layer-groups'),
+    ]);
+    state.closures = closures;
+    state.routes = routes;
+    state.poles = poles;
+    state.sites = sites;
+    state.fieldDefs = fieldDefs;
+    state.layerGroups = layerGroups;
+    if (state.activeLayerId === null) {
+      const defGroup = layerGroups.find(g => g.name === 'Default');
+      const defLayer = defGroup?.layers?.find(l => l.name === 'Default');
+      if (defLayer) state.activeLayerId = defLayer.id;
+    }
+    renderMap();
+    updateActiveLayerLabel();
+    updateToolbarRestrictions();
+    if (_mapLayersPanelOpen) renderLayersPanel();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+let _eventSource = null;
+let _pollInterval = null;
+let _lastSeenChanges = { closures: 0, poles: 0, routes: 0, sites: 0, layer_groups: 0, layers: 0 };
+const _reloadTimers = {};
+
+async function _applyTableChange(table) {
+  if (state.mode !== 'select') return;
+  try {
+    if (table === 'closures') { state.closures = await api('GET', '/closures'); renderMap(); }
+    else if (table === 'poles') { state.poles = await api('GET', '/poles'); renderMap(); }
+    else if (table === 'routes') { state.routes = await api('GET', '/routes'); renderMap(); }
+    else if (table === 'sites') { state.sites = await api('GET', '/sites'); renderMap(); }
+    else if (table === 'layer_groups' || table === 'layers') {
+      state.layerGroups = await api('GET', '/layer-groups');
+      // Validate activeLayerId is still present; if not, fall back to Default
+      const allLayers = state.layerGroups.flatMap(g => g.layers || []);
+      if (state.activeLayerId !== null && !allLayers.find(l => l.id === state.activeLayerId)) {
+        const defLayer = state.layerGroups.find(g => g.name === 'Default')?.layers?.find(l => l.name === 'Default');
+        state.activeLayerId = defLayer?.id ?? null;
+      }
+      renderMap();
+      updateActiveLayerLabel();
+      updateToolbarRestrictions();
+      if (_mapLayersPanelOpen) renderLayersPanel();
+    }
+  } catch (_) {}
+}
+
+function _scheduleReload(table) {
+  clearTimeout(_reloadTimers[table]);
+  _reloadTimers[table] = setTimeout(() => _applyTableChange(table), 200);
+}
+
+async function pollChanges() {
+  try {
+    const changes = await api('GET', '/changes');
+    for (const table of ['closures', 'poles', 'routes', 'sites', 'layer_groups', 'layers']) {
+      if (changes[table] && changes[table] > (_lastSeenChanges[table] || 0)) {
+        _lastSeenChanges[table] = changes[table];
+        _scheduleReload(table);
+      }
+    }
+  } catch (_) {}
+}
+
+async function startSync() {
+  // Set baseline so first poll doesn't re-fetch everything
+  try {
+    _lastSeenChanges = await api('GET', '/changes');
+  } catch (_) {}
+
+  // SSE for instant push (works when proxy supports streaming)
+  if (_eventSource) { _eventSource.close(); _eventSource = null; }
+  _eventSource = new EventSource('/api/events');
+  _eventSource.onmessage = (e) => {
+    try {
+      const { table } = JSON.parse(e.data);
+      if (!['closures', 'poles', 'routes', 'sites', 'layer_groups', 'layers'].includes(table)) return;
+      _lastSeenChanges[table] = Date.now();
+      _scheduleReload(table);
+    } catch (_) {}
+  };
+
+  // Polling fallback — works through any reverse proxy (4 s interval)
+  clearInterval(_pollInterval);
+  _pollInterval = setInterval(pollChanges, 4000);
+}
+
+function isItemVisible(item) {
+  if (!item.layer_id) return true;
+  for (const g of state.layerGroups) {
+    const l = (g.layers || []).find(l => l.id === item.layer_id);
+    if (l) return g.visible !== false && l.visible !== false;
+  }
+  return true;
+}
+
+function renderMap() {
+  if (state.mode === 'edit' && state.editingRouteId !== null) return; // don't reset while vertex-editing
+  // Clear existing markers
+  Object.values(state.closureMarkers).forEach(m => map.removeLayer(m));
+  Object.values(state.poleMarkers).forEach(m => map.removeLayer(m));
+  Object.values(state.siteMarkers).forEach(m => map.removeLayer(m));
+  Object.values(state.routeLayers).forEach(m => map.removeLayer(m));
+  state.closureMarkers = {};
+  state.poleMarkers = {};
+  state.siteMarkers = {};
+  state.routeLayers = {};
+
+  // Render closures
+  state.closures.forEach(c => {
+    if (!isItemVisible(c)) return;
+    const [lng, lat] = c.geom.coordinates;
+    const fiberCount = (c.cables || []).reduce((s, ca) => s + ca.fiber_count, 0) || '?';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="closure-icon"><span>${fiberCount}</span></div>`,
+      iconSize: [28, 28], iconAnchor: [14, 14]
+    });
+    const isEdit = state.mode === 'edit';
+    const marker = L.marker([lat, lng], { icon, draggable: isEdit || !c.pole_id }).addTo(map);
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (state.mode === 'select') {
+        if (c.pole_id && state.closures.filter(cl => cl.pole_id === c.pole_id).length > 1) {
+          handlePoleClick(c.pole_id);
+        } else {
+          openClosurePanel(c.id);
+        }
+      } else if (state.mode !== 'edit') {
+        if (state.mode === 'route' && !state.snapClosureId) state.snapClosureId = c.id;
+        onMapClick({ ...e, latlng: marker.getLatLng() });
+      }
+    });
+    if (isEdit) {
+      marker.on('drag', (e) => { checkEditSnap(e.latlng); });
+    }
+    marker.on('dragend', async () => {
+      const ll = marker.getLatLng();
+      if (isEdit && state.editSnapPoleId) {
+        const snappedPole = state.poles.find(p => p.id === state.editSnapPoleId);
+        if (snappedPole) {
+          const [pLng, pLat] = snappedPole.geom.coordinates;
+          marker.setLatLng([pLat, pLng]);
+          try {
+            await api('PUT', '/closures/' + c.id, { name: c.name, notes: c.notes, lat: pLat, lng: pLng, pole_id: snappedPole.id });
+            c.geom.coordinates = [pLng, pLat];
+            c.pole_id = snappedPole.id;
+          } catch (err) { alert('Failed to save closure position'); }
+        }
+        clearEditSnap();
+      } else {
+        try {
+          const body = { name: c.name, notes: c.notes, lat: ll.lat, lng: ll.lng };
+          if (isEdit) body.pole_id = null; // detach from pole when dragged freely in edit mode
+          await api('PUT', '/closures/' + c.id, body);
+          c.geom.coordinates = [ll.lng, ll.lat];
+          if (isEdit) c.pole_id = null;
+        } catch (err) { alert('Failed to save position'); }
+      }
+    });
+    const snapPole = c.pole_id ? state.poles.find(p => p.id === c.pole_id) : null;
+    marker.bindTooltip(c.name + (snapPole ? ` @ ${h(snapPole.name)}` : ''), { direction: 'top' });
+    state.closureMarkers[c.id] = marker;
+  });
+
+  // Render poles
+  state.poles.forEach(p => {
+    if (!isItemVisible(p)) return;
+    const [lng, lat] = p.geom.coordinates;
+    const poleClosureCount = state.closures.filter(c => c.pole_id === p.id).length;
+    const hasClosure = poleClosureCount > 0;
+    const countBadge = poleClosureCount > 1
+      ? `<div style="position:absolute;top:-6px;right:-6px;width:14px;height:14px;background:#1565c0;color:white;border-radius:50%;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;">${poleClosureCount}</div>`
+      : '';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="position:relative;width:10px;height:10px;">
+        <div style="width:10px;height:10px;background:#5D4037;border:2px solid ${hasClosure ? '#1565c0' : 'white'};border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3);"></div>
+        ${countBadge}
+      </div>`,
+      iconSize: [10, 10], iconAnchor: [5, 5]
+    });
+    const poleIsEdit = state.mode === 'edit';
+    const marker = L.marker([lat, lng], { icon, draggable: poleIsEdit }).addTo(map);
+    const poleClsNames = state.closures.filter(c => c.pole_id === p.id).map(c => h(c.name));
+    const tipContent = `<strong>${h(p.name)}</strong>` +
+      (poleClsNames.length ? `<br><span style="font-size:10px;opacity:.8">${poleClsNames.join(', ')}</span>` : '');
+    marker.bindTooltip(tipContent, { direction: 'top' });
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (state.mode === 'select') {
+        handlePoleClick(p.id);
+      } else if (state.mode !== 'edit') {
+        if (!state.snapPoleId) state.snapPoleId = p.id;
+        onMapClick({ ...e, latlng: marker.getLatLng() });
+      }
+    });
+    if (poleIsEdit) {
+      let dragOrigLat, dragOrigLng;
+      let dragClosureIds = [];
+      let dragRouteVertices = []; // [{routeId, vertexIndex}]
+
+      marker.on('dragstart', () => {
+        [dragOrigLng, dragOrigLat] = p.geom.coordinates;
+        dragClosureIds = state.closures.filter(c => c.pole_id === p.id).map(c => c.id);
+        dragRouteVertices = [];
+        state.routes.forEach(r => {
+          if (!(r.attached_poles || []).includes(p.id)) return;
+          r.geom.coordinates.forEach((coord, idx) => {
+            if (Math.abs(coord[1] - dragOrigLat) < 1e-5 && Math.abs(coord[0] - dragOrigLng) < 1e-5) {
+              dragRouteVertices.push({ routeId: r.id, vertexIndex: idx });
+            }
+          });
+        });
+      });
+
+      marker.on('drag', (e) => {
+        const ll = e.latlng;
+        dragClosureIds.forEach(cId => {
+          const cm = state.closureMarkers[cId];
+          if (cm) cm.setLatLng(ll);
+        });
+        const routesSeen = new Set();
+        dragRouteVertices.forEach(({ routeId, vertexIndex }) => {
+          if (routesSeen.has(routeId)) return;
+          routesSeen.add(routeId);
+          const route = state.routes.find(r => r.id === routeId);
+          const routeLine = state.routeLayers[routeId];
+          if (!route || !routeLine) return;
+          const newLatLngs = route.geom.coordinates.map((c, i) => {
+            const isAttached = dragRouteVertices.some(v => v.routeId === routeId && v.vertexIndex === i);
+            return isAttached ? [ll.lat, ll.lng] : [c[1], c[0]];
+          });
+          routeLine.setLatLngs(newLatLngs);
+        });
+      });
+
+      marker.on('dragend', async () => {
+        const ll = marker.getLatLng();
+        try {
+          await api('PUT', '/poles/' + p.id, { name: p.name, notes: p.notes, lat: ll.lat, lng: ll.lng });
+          p.geom.coordinates = [ll.lng, ll.lat];
+        } catch (err) { alert('Failed to save pole position'); return; }
+        for (const cId of dragClosureIds) {
+          const closure = state.closures.find(c => c.id === cId);
+          if (!closure) continue;
+          try {
+            await api('PUT', '/closures/' + cId, { name: closure.name, notes: closure.notes, lat: ll.lat, lng: ll.lng });
+            closure.geom.coordinates = [ll.lng, ll.lat];
+          } catch (_) { /* non-fatal */ }
+        }
+        const routesSaved = new Set();
+        for (const { routeId } of dragRouteVertices) {
+          if (routesSaved.has(routeId)) continue;
+          routesSaved.add(routeId);
+          const route = state.routes.find(r => r.id === routeId);
+          if (!route) continue;
+          const points = route.geom.coordinates.map((coord, i) => {
+            const isAttached = dragRouteVertices.some(v => v.routeId === routeId && v.vertexIndex === i);
+            return isAttached ? [ll.lng, ll.lat] : coord;
+          });
+          try {
+            await api('PUT', '/routes/' + routeId, { name: route.name, notes: route.notes, fiber_count: route.fiber_count, color: route.color, attached_poles: route.attached_poles, points });
+            route.geom.coordinates = points;
+          } catch (_) { /* non-fatal */ }
+        }
+      });
+    }
+    state.poleMarkers[p.id] = marker;
+  });
+
+  // Render routes
+  state.routes.forEach(r => {
+    if (!isItemVisible(r)) return;
+    const coords = r.geom.coordinates.map(c => [c[1], c[0]]);
+    const line = L.polyline(coords, { color: r.color || '#FF8800', weight: 4, opacity: 0.85 }).addTo(map);
+    const fcLabel = r.fiber_count ? ` (${r.fiber_count}F)` : '';
+    line.bindTooltip(r.name + fcLabel, { permanent: false, direction: 'top', sticky: true });
+    line.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (state.mode === 'select') {
+        openViewModal('route', r.id, state.routes.find(x => x.id === r.id));
+      } else if (state.mode === 'edit') {
+        if (state.editingRouteId === r.id) { clearEditHandles(); } else { startEditRoute(r.id); }
+      }
+    });
+    state.routeLayers[r.id] = line;
+  });
+
+  // Render sites
+  const SITE_STYLE = {
+    office:          { bg: '#1565c0', emoji: '🏢' },
+    pole_cabinet:    { bg: '#546e7a', emoji: '📦' },
+    ground_cabinet:  { bg: '#37474f', emoji: '🗄️' },
+    hut:             { bg: '#4e342e', emoji: '🏠' },
+  };
+  state.sites.forEach(s => {
+    if (!isItemVisible(s)) return;
+    const [lng, lat] = s.geom.coordinates;
+    const style = SITE_STYLE[s.site_type] || { bg: '#555', emoji: '📍' };
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:38px;height:38px;background:${style.bg};border:2px solid white;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer;">${style.emoji}</div>`,
+      iconSize: [38, 38], iconAnchor: [19, 19]
+    });
+    const marker = L.marker([lat, lng], { icon }).addTo(map);
+    marker.bindTooltip(s.name, { permanent: false, direction: 'top' });
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (state.mode === 'select') {
+        window.location.href = '/site/' + s.id;
+      } else {
+        onMapClick({ ...e, latlng: marker.getLatLng() });
+      }
+    });
+    state.siteMarkers[s.id] = marker;
+  });
+}
+
+async function showFiberInfo(route) {
+  const defs = state.fieldDefs.filter(d => d.entity_type === 'route');
+  const rawValues = defs.length ? await api('GET', `/field-values/route/${route.id}`) : [];
+  const valMap = {};
+  rawValues.forEach(v => { valMap[v.field_def_id] = v.value; });
+
+  const polePickerHtml = state.poles.length === 0 ? '' : `
+    <label>Attached poles</label>
+    <div style="max-height:90px;overflow-y:auto;border:1px solid #ccc;border-radius:4px;padding:4px 8px;background:#fafafa;">
+      ${state.poles.map(p => `
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer;">
+          <input type="checkbox" class="pole-attach" value="${p.id}"${(route.attached_poles || []).includes(p.id) ? ' checked' : ''}>
+          ${h(p.name)}
+        </label>
+      `).join('')}
+    </div>`;
+
+  let customHtml = '';
+  defs.forEach(d => {
+    const val = valMap[d.id] || '';
+    if (d.field_type === 'dropdown') {
+      const opts = (d.options || []).map(o => `<option value="${h(o)}" ${val===o?'selected':''}>${h(o)}</option>`).join('');
+      customHtml += `<label>${h(d.field_label)}</label><select data-def="${d.id}"><option value=""></option>${opts}</select>`;
+    } else {
+      customHtml += `<label>${h(d.field_label)}</label><input data-def="${d.id}" value="${h(val)}">`;
+    }
+  });
+
+  showModal(`Fiber: ${route.name}`, `
+    <label>Name</label><input id="m-name" value="${h(route.name)}">
+    <label>Fiber count</label><input id="m-fc" type="number" min="1" max="288" value="${route.fiber_count || 12}">
+    <label>Color</label><input id="m-color" type="color" value="${h(route.color || '#FF8800')}">
+    <label>Notes</label><textarea id="m-notes" rows="3">${h(route.notes || '')}</textarea>
+    ${polePickerHtml}
+    ${customHtml ? `<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">${customHtml}</div>` : ''}
+    <div style="margin-top:14px;"><button onclick="deleteFiber(${route.id})" style="background:#c62828;color:white;padding:6px 14px;border:none;border-radius:5px;cursor:pointer;">Delete this fiber</button></div>
+  `, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    const fiberCount = parseInt(document.getElementById('m-fc').value) || 12;
+    const color = document.getElementById('m-color').value;
+    const notes = document.getElementById('m-notes').value.trim();
+    const attachedPoles = [...document.querySelectorAll('.pole-attach:checked')].map(cb => parseInt(cb.value));
+    if (!name) return false;
+    const updated = await api('PUT', '/routes/' + route.id, { name, fiber_count: fiberCount, color, notes, attached_poles: attachedPoles });
+    const idx = state.routes.findIndex(r => r.id === route.id);
+    if (idx >= 0) state.routes[idx] = { ...state.routes[idx], ...updated };
+    if (defs.length) {
+      const values = {};
+      document.querySelectorAll('[data-def]').forEach(el => { values[el.dataset.def] = el.value; });
+      await api('PUT', `/field-values/route/${route.id}`, { values });
+    }
+    renderMap();
+    return true;
+  });
+}
+
+async function deleteFiber(routeId) {
+  if (!confirm('Delete this fiber line?')) return;
+  try {
+    await api('DELETE', '/routes/' + routeId);
+    state.routes = state.routes.filter(r => r.id !== routeId);
+    for (const cl of state.closures) {
+      if (!cl.cables) continue;
+      const removed = cl.cables.filter(cab => cab.route_id === routeId).map(cab => cab.id);
+      if (removed.length === 0) continue;
+      cl.cables = cl.cables.filter(cab => cab.route_id !== routeId);
+      if (cl.splices) {
+        cl.splices = cl.splices.filter(s => !removed.includes(s.from_cable_id) && !removed.includes(s.to_cable_id));
+      }
+    }
+    document.querySelectorAll('.modal-bg').forEach(el => el.remove());
+    renderMap();
+    if (state.selectedClosure) openClosurePanel(state.selectedClosure);
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function promptBulkDelete(bounds) {
+  const routesInside = state.routes.filter(r =>
+    r.geom.coordinates.some(([lng, lat]) => bounds.contains(L.latLng(lat, lng)))
+  );
+  const closuresInside = state.closures.filter(c => {
+    const [lng, lat] = c.geom.coordinates;
+    return bounds.contains(L.latLng(lat, lng));
+  });
+  const polesInside = state.poles.filter(p => {
+    const [lng, lat] = p.geom.coordinates;
+    return bounds.contains(L.latLng(lat, lng));
+  });
+
+  if (!routesInside.length && !closuresInside.length && !polesInside.length) {
+    alert('No items in selected area.');
+    return;
+  }
+
+  const lines = [];
+  if (routesInside.length)   lines.push(`${routesInside.length} fiber(s)`);
+  if (closuresInside.length) lines.push(`${closuresInside.length} closure(s)`);
+  if (polesInside.length)    lines.push(`${polesInside.length} pole(s)`);
+
+  showModal('Delete Selected Items', `
+    <div style="color:#c62828;font-weight:600;">This will permanently delete:</div>
+    <ul style="margin:10px 0 6px;">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
+    <div style="font-size:0.82em;color:#888;">Associated cables and splices will also be removed.</div>
+  `, async () => {
+    try {
+      for (const r of routesInside) {
+        await api('DELETE', '/routes/' + r.id);
+        state.routes = state.routes.filter(x => x.id !== r.id);
+        for (const cl of state.closures) {
+          if (!cl.cables) continue;
+          const gone = cl.cables.filter(cab => cab.route_id === r.id).map(cab => cab.id);
+          if (!gone.length) continue;
+          cl.cables = cl.cables.filter(cab => cab.route_id !== r.id);
+          if (cl.splices) cl.splices = cl.splices.filter(s => !gone.includes(s.from_cable_id) && !gone.includes(s.to_cable_id));
+        }
+      }
+      for (const c of closuresInside) {
+        await api('DELETE', '/closures/' + c.id);
+        state.closures = state.closures.filter(x => x.id !== c.id);
+      }
+      for (const p of polesInside) {
+        await api('DELETE', '/poles/' + p.id);
+        state.poles = state.poles.filter(x => x.id !== p.id);
+      }
+      if (state.selectedClosure && !state.closures.find(c => c.id === state.selectedClosure)) {
+        closePanel();
+      }
+      renderMap();
+    } catch (err) { alert('Delete failed: ' + err.message); }
+    return true;
+  });
+}
+
+// ============ EDIT MODAL ============
+async function openEditModal(entityType, entityId, obj) {
+  if (!obj) return;
+  const defs = state.fieldDefs.filter(d => d.entity_type === entityType);
+  const rawValues = defs.length ? await api('GET', `/field-values/${entityType}/${entityId}`) : [];
+  const valMap = {};
+  rawValues.forEach(v => { valMap[v.field_def_id] = v.value; });
+
+  let standardFields = `
+    <label>Name</label><input id="ef-name" value="${h(obj.name || '')}">
+    <label>Notes</label><textarea id="ef-notes" rows="2">${h(obj.notes || '')}</textarea>
+  `;
+  if (entityType === 'route') {
+    standardFields += `
+      <label>Fiber count</label><input id="ef-fc" type="number" min="1" max="288" value="${obj.fiber_count || 12}">
+      <label>Color</label><input id="ef-color" type="color" value="${obj.color || '#FF8800'}">
+    `;
+    if (state.poles.length > 0) {
+      standardFields += `<label>Attached poles</label>
+        <div style="max-height:90px;overflow-y:auto;border:1px solid #ccc;border-radius:4px;padding:4px 8px;background:#fafafa;">
+          ${state.poles.map(p => `
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer;">
+              <input type="checkbox" class="pole-attach" value="${p.id}"${(obj.attached_poles||[]).includes(p.id)?' checked':''}>
+              ${h(p.name)}
+            </label>`).join('')}
+        </div>`;
+    }
+  }
+
+  let customHtml = '';
+  defs.forEach(d => {
+    const val = valMap[d.id] || '';
+    if (d.field_type === 'dropdown') {
+      const opts = (d.options || []).map(o => `<option value="${h(o)}" ${val===o?'selected':''}>${h(o)}</option>`).join('');
+      customHtml += `<label>${h(d.field_label)}</label><select data-def="${d.id}"><option value=""></option>${opts}</select>`;
+    } else {
+      customHtml += `<label>${h(d.field_label)}</label><input data-def="${d.id}" value="${h(val)}">`;
+    }
+  });
+
+  showModal(`Edit ${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`,
+    standardFields + (customHtml ? `<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">${customHtml}</div>` : ''),
+    async () => {
+      const name = document.getElementById('ef-name').value.trim();
+      if (!name) return false;
+      const notes = document.getElementById('ef-notes').value.trim();
+
+      if (entityType === 'closure') {
+        const updated = await api('PUT', `/closures/${entityId}`, { name, notes, lat: obj.geom.coordinates[1], lng: obj.geom.coordinates[0] });
+        Object.assign(obj, updated);
+      } else if (entityType === 'pole') {
+        const updated = await api('PUT', `/poles/${entityId}`, { name, notes });
+        Object.assign(obj, updated);
+      } else if (entityType === 'route') {
+        const fc = parseInt(document.getElementById('ef-fc').value) || obj.fiber_count || 12;
+        const color = document.getElementById('ef-color').value;
+        const attachedPoles = [...document.querySelectorAll('.pole-attach:checked')].map(cb => parseInt(cb.value));
+        const updated = await api('PUT', `/routes/${entityId}`, { name, notes, fiber_count: fc, color, attached_poles: attachedPoles });
+        const idx = state.routes.findIndex(r => r.id === entityId);
+        if (idx >= 0) state.routes[idx] = { ...state.routes[idx], ...updated };
+        Object.assign(obj, updated);
+      }
+
+      if (defs.length) {
+        const values = {};
+        document.querySelectorAll('[data-def]').forEach(el => { values[el.dataset.def] = el.value; });
+        await api('PUT', `/field-values/${entityType}/${entityId}`, { values });
+      }
+
+      renderMap();
+      if (entityType === 'closure' && state.selectedClosure === entityId) openClosurePanel(entityId);
+      return true;
+    }
+  );
+}
+
+// ============ VIEW MODAL ============
+async function openViewModal(entityType, entityId, obj) {
+  if (!obj) return;
+  const defs = state.fieldDefs.filter(d => d.entity_type === entityType);
+  const rawValues = defs.length ? await api('GET', `/field-values/${entityType}/${entityId}`) : [];
+  const valMap = {};
+  rawValues.forEach(v => { valMap[v.field_def_id] = v.value; });
+
+  let rows = `
+    <div class="view-row"><span class="view-label">Name</span><span>${h(obj.name || '')}</span></div>
+    <div class="view-row"><span class="view-label">Notes</span><span>${h(obj.notes || '') || '<em style="color:#999">—</em>'}</span></div>
+  `;
+  if (entityType === 'route') {
+    const colorSwatch = `<span style="display:inline-block;width:13px;height:13px;background:${h(obj.color||'#FF8800')};border-radius:3px;vertical-align:middle;margin-right:4px;border:1px solid #ccc;"></span>`;
+    rows += `
+      <div class="view-row"><span class="view-label">Fiber count</span><span>${obj.fiber_count || 12}</span></div>
+      <div class="view-row"><span class="view-label">Color</span><span>${colorSwatch}${h(obj.color||'#FF8800')}</span></div>
+    `;
+  }
+  defs.forEach(d => {
+    const val = valMap[d.id] || '';
+    rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? h(val) : '<em style="color:#999">—</em>'}</span></div>`;
+  });
+
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  const label = entityType === 'route' ? 'Fiber' : entityType.charAt(0).toUpperCase() + entityType.slice(1);
+  const deleteBtn = (entityType === 'route' || entityType === 'pole')
+    ? `<button id="view-del-btn" style="background:#c62828;color:white;padding:8px 14px;border:none;border-radius:5px;cursor:pointer;font-size:13px;">Delete</button>`
+    : '';
+  bg.innerHTML = `<div class="modal">
+    <h2 style="margin:0 0 14px;">${label}: ${h(obj.name)}</h2>
+    <div style="display:grid;gap:5px;margin-bottom:18px;">${rows}</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      ${deleteBtn}
+      <button id="view-close-btn" style="margin-left:auto;padding:8px 16px;font-size:13px;border-radius:5px;cursor:pointer;border:1px solid #ccc;background:white;">Close</button>
+      <button class="btn-primary" id="view-edit-btn">Edit</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+  document.getElementById('view-close-btn').onclick = () => bg.remove();
+  document.getElementById('view-edit-btn').onclick = () => { bg.remove(); openEditModal(entityType, entityId, obj); };
+  if (entityType === 'route') {
+    document.getElementById('view-del-btn').onclick = () => { bg.remove(); deleteFiber(entityId); };
+  } else if (entityType === 'pole') {
+    document.getElementById('view-del-btn').onclick = async () => {
+      if (!confirm(`Delete pole "${obj.name}"? Closures attached to it will become standalone.`)) return;
+      bg.remove();
+      await api('DELETE', '/poles/' + entityId);
+      state.poles = state.poles.filter(p => p.id !== entityId);
+      state.closures.forEach(c => { if (c.pole_id === entityId) c.pole_id = null; });
+      renderMap();
+    };
+  }
+}
+
+function handlePoleClick(poleId) {
+  const pole = state.poles.find(p => p.id === poleId);
+  const closures = state.closures.filter(c => c.pole_id === poleId);
+
+  if (closures.length === 0) { openViewModal('pole', poleId, pole); return; }
+
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal" style="min-width:320px;">
+    <h2 style="margin:0 0 14px;">${h(pole.name)}</h2>
+    <div style="display:grid;gap:6px;margin-bottom:16px;">
+      ${closures.map(c => `
+        <button class="closure-pick-btn" data-id="${c.id}"
+          style="padding:10px 14px;text-align:left;border:1px solid #e0e0e0;border-radius:6px;background:white;cursor:pointer;font-size:13px;">
+          <strong>${h(c.name)}</strong>
+          ${c.notes ? `<div style="font-size:11px;color:#888;margin-top:2px;">${h(c.notes)}</div>` : ''}
+        </button>`).join('')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <button id="pole-info-btn" style="font-size:12px;color:#555;background:none;border:none;cursor:pointer;">Pole info</button>
+      <button id="pick-cancel-btn" style="padding:8px 16px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+  bg.querySelectorAll('.closure-pick-btn').forEach(btn => {
+    btn.addEventListener('click', () => { bg.remove(); openClosurePanel(parseInt(btn.dataset.id)); });
+  });
+  bg.querySelector('#pole-info-btn').onclick = () => { bg.remove(); openViewModal('pole', poleId, pole); };
+  bg.querySelector('#pick-cancel-btn').onclick = () => bg.remove();
+}
+
+function buildOnCreateHtml(entityType) {
+  const defs = state.fieldDefs.filter(d => d.entity_type === entityType && d.show_on_create);
+  if (!defs.length) return '';
+  let html = '<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">';
+  defs.forEach(d => {
+    if (d.field_type === 'dropdown') {
+      const opts = (d.options || []).map(o => `<option value="${h(o)}">${h(o)}</option>`).join('');
+      html += `<label>${h(d.field_label)}</label><select data-def="${d.id}"><option value=""></option>${opts}</select>`;
+    } else {
+      html += `<label>${h(d.field_label)}</label><input data-def="${d.id}" value="">`;
+    }
+  });
+  return html + '</div>';
+}
+
+async function saveOnCreateFields(entityType, entityId) {
+  const defs = state.fieldDefs.filter(d => d.entity_type === entityType && d.show_on_create);
+  if (!defs.length) return;
+  const values = {};
+  document.querySelectorAll('[data-def]').forEach(el => { values[el.dataset.def] = el.value; });
+  await api('PUT', `/field-values/${entityType}/${entityId}`, { values });
+}
+
+// ============ CREATE CLOSURE/POLE/ROUTE ============
+function promptCreateClosure(latlng, snappedRouteId, snappedPoleId) {
+  // Determine whether the snap is at a route endpoint or mid-span
+  let routeCableMode = 'BOTH';
+  if (snappedRouteId) {
+    const snapRoute = state.routes.find(r => r.id === snappedRouteId);
+    if (snapRoute) {
+      const coords = snapRoute.geom.coordinates; // [lng, lat] pairs
+      const THRESH = 1e-7;
+      const atStart = Math.abs(coords[0][1] - latlng.lat) < THRESH &&
+                      Math.abs(coords[0][0] - latlng.lng) < THRESH;
+      const atEnd   = Math.abs(coords[coords.length - 1][1] - latlng.lat) < THRESH &&
+                      Math.abs(coords[coords.length - 1][0] - latlng.lng) < THRESH;
+      if (atStart) routeCableMode = 'OUT';
+      else if (atEnd) routeCableMode = 'IN';
+    }
+  }
+
+  const routeNote = snappedRouteId
+    ? routeCableMode === 'BOTH'
+      ? `<div style="font-size:11px;color:#2e7d32;margin-top:8px;">📡 Snapped to fiber mid-span — IN and OUT cables will be auto-created.</div>`
+      : `<div style="font-size:11px;color:#2e7d32;margin-top:8px;">📡 Snapped to fiber endpoint — ${routeCableMode} cable will be auto-created.</div>`
+    : '';
+  const poleNote = snappedPoleId
+    ? `<div style="font-size:11px;color:#1565c0;margin-top:6px;">📍 Snapped to pole — cables will be auto-created for attached fibers.</div>`
+    : '';
+  showModal('Add Splice Closure', `
+    <label>Name</label><input id="m-name" value="SC-${String(state.closures.length + 1).padStart(3, '0')}">
+    <label>Notes (optional)</label><textarea id="m-notes" rows="2"></textarea>
+    ${routeNote}${poleNote}
+    ${buildOnCreateHtml('closure')}
+  `, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    const notes = document.getElementById('m-notes').value.trim();
+    if (!name) return false;
+    const c = await api('POST', '/closures', { name, notes, lat: latlng.lat, lng: latlng.lng, pole_id: snappedPoleId, layer_id: state.activeLayerId });
+    c.cables = [];
+    state.closures.push(c);
+    if (snappedRouteId) {
+      const route = state.routes.find(r => r.id === snappedRouteId);
+      if (route) {
+        if (routeCableMode === 'IN' || routeCableMode === 'BOTH') {
+          const cable = await api('POST', `/closures/${c.id}/cables`, { name: `${route.name} ↓`, fiber_count: route.fiber_count, direction: 'IN', route_id: route.id });
+          c.cables.push(cable);
+        }
+        if (routeCableMode === 'OUT' || routeCableMode === 'BOTH') {
+          const cable = await api('POST', `/closures/${c.id}/cables`, { name: `${route.name} ↑`, fiber_count: route.fiber_count, direction: 'OUT', route_id: route.id });
+          c.cables.push(cable);
+        }
+      }
+    }
+    if (snappedPoleId) {
+      const pole = state.poles.find(p => p.id === snappedPoleId);
+      const pLng = pole ? pole.geom.coordinates[0] : null;
+      const pLat = pole ? pole.geom.coordinates[1] : null;
+      const THRESH = 1e-7;
+      const routesAtPole = state.routes.filter(r => (r.attached_poles || []).includes(snappedPoleId));
+      // Load cables for sibling closures on this pole (to avoid duplicating cables that already exist there)
+      const siblingClosures = state.closures.filter(cl => cl.pole_id === snappedPoleId && cl.id !== c.id);
+      for (const cl of siblingClosures) {
+        if (!cl.cables) cl.cables = await api('GET', `/closures/${cl.id}/cables`);
+      }
+      for (const route of routesAtPole) {
+        // Skip if this route already has cables in another closure on this pole
+        const alreadyHasCables = siblingClosures.some(cl =>
+          cl.cables && cl.cables.some(cab => cab.route_id === route.id)
+        );
+        if (alreadyHasCables) continue;
+        const coords = route.geom.coordinates;
+        let mode = 'BOTH';
+        if (pole) {
+          const atStart = Math.abs(coords[0][1] - pLat) < THRESH && Math.abs(coords[0][0] - pLng) < THRESH;
+          const atEnd   = Math.abs(coords[coords.length - 1][1] - pLat) < THRESH && Math.abs(coords[coords.length - 1][0] - pLng) < THRESH;
+          if (atStart) mode = 'OUT';
+          else if (atEnd) mode = 'IN';
+        }
+        if (mode === 'IN' || mode === 'BOTH') {
+          const cable = await api('POST', `/closures/${c.id}/cables`, { name: `${route.name} ↓`, fiber_count: route.fiber_count, direction: 'IN', route_id: route.id });
+          c.cables.push(cable);
+        }
+        if (mode === 'OUT' || mode === 'BOTH') {
+          const cable = await api('POST', `/closures/${c.id}/cables`, { name: `${route.name} ↑`, fiber_count: route.fiber_count, direction: 'OUT', route_id: route.id });
+          c.cables.push(cable);
+        }
+      }
+    }
+    await saveOnCreateFields('closure', c.id);
+    renderMap();
+    setMode('select');
+    return true;
+  });
+}
+
+function promptCreatePole(latlng) {
+  showModal('Add Pole', `
+    <label>Name</label><input id="m-name" value="P-${state.poles.length + 1}">
+    ${buildOnCreateHtml('pole')}
+  `, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    if (!name) return false;
+    const p = await api('POST', '/poles', { name, lat: latlng.lat, lng: latlng.lng, layer_id: state.activeLayerId });
+    state.poles.push(p);
+    await saveOnCreateFields('pole', p.id);
+    renderMap();
+    setMode('select');
+    return true;
+  });
+}
+
+function pickSiteType() {
+  const activeLayer = getActiveLayer();
+  if (activeLayer?.allowed_types?.length > 0 && !activeLayer.allowed_types.includes('site')) {
+    showLayerBlockMessage('site', activeLayer.name);
+    return;
+  }
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal" style="min-width:300px;">
+    <h2 style="margin:0 0 16px;">Choose site type</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+      <button class="site-type-btn" data-type="office"         style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>🏢</span><span style="font-size:12px;font-weight:600;color:#333;">Office</span></button>
+      <button class="site-type-btn" data-type="pole_cabinet"   style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>📦</span><span style="font-size:12px;font-weight:600;color:#333;">Pole Cabinet</span></button>
+      <button class="site-type-btn" data-type="ground_cabinet" style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>🗄️</span><span style="font-size:12px;font-weight:600;color:#333;">Ground Cabinet</span></button>
+      <button class="site-type-btn" data-type="hut"            style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>🏠</span><span style="font-size:12px;font-weight:600;color:#333;">Hut</span></button>
+    </div>
+    <div style="text-align:right;margin-top:4px;"><button id="site-pick-cancel" style="padding:8px 16px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;">Cancel</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+  bg.querySelectorAll('.site-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.pendingSiteType = btn.dataset.type;
+      bg.remove();
+      setMode('site');
+    });
+  });
+  bg.querySelector('#site-pick-cancel').onclick = () => bg.remove();
+}
+
+function promptCreateSite(latlng, siteType) {
+  const LABELS = { office: 'Office', pole_cabinet: 'Pole Cabinet', ground_cabinet: 'Ground Cabinet', hut: 'Hut' };
+  const label = LABELS[siteType] || 'Site';
+  const defaultName = `${label}-${String(state.sites.length + 1).padStart(3, '0')}`;
+  showModal(`Add ${label}`, `
+    <label>Name</label><input id="m-name" value="${defaultName}">
+    <label>Notes (optional)</label><textarea id="m-notes" rows="2"></textarea>
+  `, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    if (!name) return false;
+    const s = await api('POST', '/sites', { name, notes: document.getElementById('m-notes').value.trim(), lat: latlng.lat, lng: latlng.lng, site_type: siteType, layer_id: state.activeLayerId });
+    state.sites.push(s);
+    renderMap();
+    setMode('select');
+    return true;
+  });
+}
+
+function promptCreateRoute(points, tempLine, snapClosures, snapSites) {
+  const attachedAtDraw = [...state.drawAttachedPoles];
+  const snapClosuresCopy = snapClosures ? [...snapClosures] : [];
+  const attachedSites = [...new Set((snapSites || []).filter(Boolean))];
+
+  // Identify endpoint poles (position matches first or last drawn point)
+  const THRESH_PRE = 1e-7;
+  const endpointPoleIds = attachedAtDraw.filter(poleId => {
+    const pole = state.poles.find(p => p.id === poleId);
+    if (!pole) return false;
+    const [pLng, pLat] = pole.geom.coordinates;
+    const atStart = Math.abs(points[0][0] - pLat) < THRESH_PRE && Math.abs(points[0][1] - pLng) < THRESH_PRE;
+    const atEnd   = Math.abs(points[points.length-1][0] - pLat) < THRESH_PRE && Math.abs(points[points.length-1][1] - pLng) < THRESH_PRE;
+    return atStart || atEnd;
+  });
+
+  // Build closure picker selects for endpoint poles with 2+ closures
+  let closurePickerHtml = '';
+  endpointPoleIds.forEach(poleId => {
+    const poleClosures = state.closures.filter(c => c.pole_id === poleId);
+    if (poleClosures.length < 2) return;
+    const pole = state.poles.find(p => p.id === poleId);
+    closurePickerHtml += `<label>Closure at ${h(pole.name)}</label>
+      <select id="cp-${poleId}">
+        ${poleClosures.map(c => `<option value="${c.id}">${h(c.name)}</option>`).join('')}
+      </select>`;
+  });
+
+  const poleNote = attachedAtDraw.length > 0
+    ? `<div style="font-size:11px;color:#555;margin-top:6px;">📍 Snapped to ${attachedAtDraw.length} pole(s) along route</div>`
+    : '';
+  const siteNote = attachedSites.length > 0
+    ? `<div style="font-size:11px;color:#555;margin-top:6px;">🏢 Entering ${attachedSites.length === 2 ? '2 sites' : '1 site'}</div>`
+    : '';
+  showModal('Add Fiber', `
+    <label>Name</label><input id="m-name" value="Fiber-${state.routes.length + 1}">
+    <label>Fiber count</label><input id="m-fc" type="number" min="1" max="288" value="12">
+    <label>Color</label><input id="m-color" type="color" value="#FF8800">
+    <label>Notes (optional)</label><textarea id="m-notes" rows="2"></textarea>
+    ${poleNote}
+    ${siteNote}
+    ${closurePickerHtml}
+    ${buildOnCreateHtml('route')}
+  `, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    const fiberCount = parseInt(document.getElementById('m-fc').value) || 12;
+    const color = document.getElementById('m-color').value;
+    const notes = document.getElementById('m-notes').value.trim();
+    if (!name) return false;
+    clearPreview();
+    const lnglat = points.map(p => [p[1], p[0]]);
+    const r = await api('POST', '/routes', { name, notes: notes || null, fiber_count: fiberCount, color, attached_poles: attachedAtDraw, points: lnglat, attached_sites: attachedSites, layer_id: state.activeLayerId });
+    state.drawAttachedPoles = [];
+    state.routes.push(r);
+
+    // Auto-create cables in snapped closures
+    const startClosureId = snapClosuresCopy[0] ?? null;
+    const endClosureId   = snapClosuresCopy[snapClosuresCopy.length - 1] ?? null;
+    const autoCreateCable = async (closureId, direction) => {
+      const cable = await api('POST', `/closures/${closureId}/cables`, { name: r.name, fiber_count: r.fiber_count, direction, route_id: r.id });
+      const cl = state.closures.find(c => c.id === closureId);
+      if (cl && cl.cables) cl.cables.push(cable);
+    };
+    if (startClosureId && startClosureId === endClosureId) {
+      await autoCreateCable(startClosureId, 'IN');
+    } else {
+      if (startClosureId) await autoCreateCable(startClosureId, 'OUT');
+      if (endClosureId)   await autoCreateCable(endClosureId, 'IN');
+    }
+    if (state.selectedClosure && (state.selectedClosure === startClosureId || state.selectedClosure === endClosureId)) {
+      openClosurePanel(state.selectedClosure);
+    }
+
+    // Auto-create cables in closures attached to poles — endpoint poles only (skip mid-span)
+    const THRESH = 1e-7;
+    for (const poleId of attachedAtDraw) {
+      const pole = state.poles.find(p => p.id === poleId);
+      if (!pole) continue;
+      const poleClosures = state.closures.filter(c => c.pole_id === poleId);
+      if (!poleClosures.length) continue;
+      // For poles with multiple closures, use the user's selection; otherwise auto-pick the only one
+      const pickEl = document.getElementById(`cp-${poleId}`);
+      const poleClosure = pickEl
+        ? poleClosures.find(c => c.id === parseInt(pickEl.value))
+        : poleClosures[0];
+      if (!poleClosure) continue;
+      if (poleClosure.id === startClosureId || poleClosure.id === endClosureId) continue;
+      const pLng = pole.geom.coordinates[0], pLat = pole.geom.coordinates[1];
+      const atStart = Math.abs(points[0][0] - pLat) < THRESH && Math.abs(points[0][1] - pLng) < THRESH;
+      const atEnd   = Math.abs(points[points.length - 1][0] - pLat) < THRESH && Math.abs(points[points.length - 1][1] - pLng) < THRESH;
+      if (!atStart && !atEnd) continue; // mid-span pole — skip, user can add cable manually
+      if (attachedAtDraw.length >= 2) {
+        const inCable  = await api('POST', `/closures/${poleClosure.id}/cables`, { name: r.name, fiber_count: r.fiber_count, direction: 'IN',  route_id: r.id });
+        const outCable = await api('POST', `/closures/${poleClosure.id}/cables`, { name: r.name, fiber_count: r.fiber_count, direction: 'OUT', route_id: r.id });
+        if (poleClosure.cables) { poleClosure.cables.push(inCable); poleClosure.cables.push(outCable); }
+      } else {
+        const dir = atStart ? 'OUT' : 'IN';
+        const cable = await api('POST', `/closures/${poleClosure.id}/cables`, { name: r.name, fiber_count: r.fiber_count, direction: dir, route_id: r.id });
+        if (poleClosure.cables) poleClosure.cables.push(cable);
+      }
+      if (state.selectedClosure === poleClosure.id) openClosurePanel(state.selectedClosure);
+    }
+
+    if (tempLine) map.removeLayer(tempLine);
+    await saveOnCreateFields('route', r.id);
+    renderMap();
+    setMode('select');
+    return true;
+  }, () => {
+    clearPreview();
+    if (tempLine) map.removeLayer(tempLine);
+    state.drawAttachedPoles = [];
+  });
+}
+
+// ============ MODAL ============
+function showModal(title, bodyHtml, onConfirm, onCancel) {
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal">
+      <h2>${h(title)}</h2>
+      <div class="modal-body">${bodyHtml}</div>
+      <div class="btn-row">
+        <button id="modal-cancel">Cancel</button>
+        <button class="primary" id="modal-confirm">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(bg);
+  const close = () => document.body.removeChild(bg);
+  bg.querySelector('#modal-cancel').onclick = () => { close(); onCancel && onCancel(); };
+  bg.querySelector('#modal-confirm').onclick = async () => {
+    try {
+      const result = await onConfirm();
+      if (result !== false) close();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+}
+
+// ============ SIDE PANEL (SPLICES) ============
+async function openClosurePanel(closureId) {
+  const closure = state.closures.find(c => c.id === closureId);
+  if (!closure) return;
+  // Load cables and splices
+  const [cables, splices, fieldValues] = await Promise.all([
+    api('GET', `/closures/${closureId}/cables`),
+    api('GET', `/closures/${closureId}/splices`),
+    api('GET', `/field-values/closure/${closureId}`),
+  ]);
+  closure.cables = cables;
+  closure.splices = splices;
+  closure.fieldValues = fieldValues;
+  // Pre-load sibling closures' cables so the Add Cable picker can filter them out
+  if (closure.pole_id) {
+    const siblings = state.closures.filter(cl => cl.pole_id === closure.pole_id && cl.id !== closureId);
+    for (const sib of siblings) {
+      if (!sib.cables) sib.cables = await api('GET', `/closures/${sib.id}/cables`);
+    }
+  }
+  if (state.selectedClosure !== closureId) {
+    panelState.expandedCables.clear();
+    panelState.expandedTubes.clear();
+  }
+  state.selectedClosure = closureId;
+  state.selectedFiber = null;
+  state.showAddCable = false;
+  document.getElementById('side-panel').classList.add('open');
+  renderPanel();
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  state.selectedClosure = null;
+  state.selectedFiber = null;
+}
+
+function renderPanel() {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c) return;
+
+  const connSet = new Set();
+  c.splices.forEach(s => {
+    connSet.add(`${s.from_cable_id}-${s.from_fiber}`);
+    connSet.add(`${s.to_cable_id}-${s.to_fiber}`);
+  });
+
+  const sel = state.selectedFiber;
+  let html = `
+    <div class="panel-header">
+      <div>
+        <h2>${h(c.name)}</h2>
+        ${(() => {
+          let mf = '';
+          if (c.notes) mf += `<div class="panel-meta-field"><span class="panel-meta-label">Notes</span>${h(c.notes)}</div>`;
+          if (c.fieldValues && c.fieldValues.length) {
+            for (const fv of c.fieldValues) {
+              if (fv.value) mf += `<div class="panel-meta-field"><span class="panel-meta-label">${h(fv.field_label)}</span>${h(fv.value)}</div>`;
+            }
+          }
+          return mf ? `<div class="panel-meta-fields">${mf}</div>` : '';
+        })()}
+        <div class="meta">${c.cables.length} cable(s) · ${c.splices.length} splice(s)</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;">
+        ${c.pole_id ? `<button class="icon-btn" title="View pole" style="font-size:15px;" onclick="openViewModal('pole',${c.pole_id},state.poles.find(p=>p.id===${c.pole_id}))">📍</button>` : ''}
+        <button class="icon-btn" style="font-size:16px;" onclick="openEditModal('closure',${c.id},state.closures.find(x=>x.id===${c.id}))">✏️</button>
+        <button class="close-btn" onclick="closePanel()">×</button>
+      </div>
+    </div>
+  `;
+
+  if (sel) {
+    const sc = c.cables.find(x => x.id === sel.cableId);
+    const fc = FIBER_COLORS[sel.fiberIdx % 12];
+    html += `<div class="sel-bar">
+      <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
+      <span>${h(sc?.name)} F${sel.fiberIdx + 1} (${fc.name}) — click another fiber to splice</span>
+      <button onclick="state.selectedFiber=null;renderPanel();">×</button>
+    </div>`;
+  }
+
+  // Auto-expand cable/tube containing selected fiber
+  if (sel) {
+    panelState.expandedCables.add(sel.cableId);
+    const selCable = c.cables.find(x => x.id === sel.cableId);
+    if (selCable && Math.ceil(selCable.fiber_count / 12) > 1) {
+      panelState.expandedTubes.add(`${sel.cableId}-${Math.floor(sel.fiberIdx / 12)}`);
+    }
+  }
+
+  html += '<div class="section-title">Cables</div>';
+
+  c.cables.forEach(cable => {
+    const tubes = Math.ceil(cable.fiber_count / 12);
+    const isExpanded = panelState.expandedCables.has(cable.id);
+    const chevron = isExpanded ? '▼' : '▶';
+    const dirBadge = cable.link_closure_id
+      ? (() => {
+          const linked = state.closures.find(cl => cl.id === cable.link_closure_id);
+          return `<span class="dir-badge" style="background:#f3e5f5;color:#6a1b9a;">↔ ${linked ? h(linked.name) : 'Link'}</span>`;
+        })()
+      : `<span class="dir-badge dir-${h(cable.direction)}">${h(cable.direction)}</span>`;
+    html += `<div class="cable">
+      <div class="cable-hdr" onclick="toggleCable(${cable.id})">
+        <span>${chevron} ${h(cable.name)} · ${cable.fiber_count}F · ${dirBadge}</span>
+        <button class="icon-btn" onclick="event.stopPropagation();deleteCable(${cable.id})" title="Delete">🗑</button>
+      </div>`;
+    if (isExpanded) {
+      for (let t = 0; t < tubes; t++) {
+        const inTube = Math.min(12, cable.fiber_count - t * 12);
+        const tubeKey = `${cable.id}-${t}`;
+        const isTubeExpanded = panelState.expandedTubes.has(tubeKey);
+        if (tubes > 1) {
+          const tc = FIBER_COLORS[t % 12];
+          const tChevron = isTubeExpanded ? '▼' : '▶';
+          html += `<div class="tube-label" onclick="toggleTube(${cable.id}, ${t})" style="cursor:pointer;user-select:none;">${tChevron} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tc.bg};border:1px solid ${tc.border};vertical-align:middle;margin-right:2px;"></span>${tc.name} tube (${inTube}F)</div>`;
+        }
+        if (tubes === 1 || isTubeExpanded) {
+          for (let f = 0; f < inTube; f++) {
+            const fi = t * 12 + f;
+            const fc = FIBER_COLORS[f % 12];
+            const key = `${cable.id}-${fi}`;
+            const isConn = connSet.has(key);
+            const isSel = sel && sel.cableId === cable.id && sel.fiberIdx === fi;
+            const sinfo = c.splices.find(s =>
+              (s.from_cable_id === cable.id && s.from_fiber === fi) ||
+              (s.to_cable_id === cable.id && s.to_fiber === fi)
+            );
+            let connLbl = '';
+            if (sinfo) {
+              const oId = sinfo.from_cable_id === cable.id ? sinfo.to_cable_id : sinfo.from_cable_id;
+              const oF = sinfo.from_cable_id === cable.id ? sinfo.to_fiber : sinfo.from_fiber;
+              const oC = c.cables.find(x => x.id === oId);
+              connLbl = `<span class="conn-info">→ ${h(oC?.name || '?')} F${oF + 1}</span>`;
+            }
+            html += `<div class="fiber-row ${isSel ? 'selected' : ''} ${isConn && !isSel ? 'connected' : ''}" onclick="selectFiber(${cable.id}, ${fi})">
+              <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
+              <span class="fiber-name">F${fi + 1} · ${fc.name}</span>${connLbl}
+            </div>`;
+          }
+        }
+      }
+    }
+    html += '</div>';
+  });
+
+  if (state.showAddCable) {
+    if (c.pole_id) {
+      const usedRouteIds = new Set(c.cables.filter(cab => cab.route_id).map(cab => cab.route_id));
+      // Also exclude routes already cabled in sibling closures on the same pole
+      state.closures
+        .filter(cl => cl.pole_id === c.pole_id && cl.id !== c.id)
+        .forEach(sib => {
+          if (sib.cables) sib.cables.filter(cab => cab.route_id).forEach(cab => usedRouteIds.add(cab.route_id));
+        });
+      const eligible = state.routes.filter(r =>
+        Array.isArray(r.attached_poles) && r.attached_poles.includes(c.pole_id) &&
+        !usedRouteIds.has(r.id)
+      );
+      if (eligible.length === 0) {
+        html += `<div class="form-card">
+          <div style="color:#888;font-size:0.85em;">No unconnected fibers on this pole.</div>
+          <div class="btn-row"><button onclick="state.showAddCable=false;renderPanel();">Cancel</button></div>
+        </div>`;
+      } else {
+        html += `<div class="form-card">
+          <label>Fiber</label>
+          <select id="ac-route">${eligible.map(r =>
+            `<option value="${r.id}">${h(r.name)} (${r.fiber_count}F)</option>`
+          ).join('')}</select>
+          <div class="btn-row">
+            <button class="primary" onclick="doAddCable()">Add</button>
+            <button onclick="state.showAddCable=false;renderPanel();">Cancel</button>
+          </div>
+        </div>`;
+      }
+    } else {
+      html += `<div class="form-card">
+        <label>Cable name</label>
+        <input id="ac-name" value="Cable-${c.cables.length + 1}">
+        <label>Fiber count</label>
+        <input id="ac-fc" type="number" min="1" max="288" value="12">
+        <label>Direction</label>
+        <select id="ac-dir"><option value="IN">IN</option><option value="OUT">OUT</option></select>
+        <div class="btn-row">
+          <button class="primary" onclick="doAddCable()">Add</button>
+          <button onclick="state.showAddCable=false;renderPanel();">Cancel</button>
+        </div>
+      </div>`;
+    }
+  } else {
+    const siblingClosuresOnPole = c.pole_id
+      ? state.closures.filter(cl => cl.pole_id === c.pole_id && cl.id !== c.id)
+      : [];
+    if (!state.showLinkClosure) {
+      html += `<button class="add-btn" onclick="state.showAddCable=true;state.showLinkClosure=false;renderPanel();">+ Add cable</button>`;
+      if (siblingClosuresOnPole.length > 0) {
+        html += `<button class="add-btn" onclick="state.showLinkClosure=true;state.showAddCable=false;renderPanel();">↔ Link Closure</button>`;
+      }
+    }
+    if (state.showLinkClosure) {
+      const targetOptions = siblingClosuresOnPole.length === 1
+        ? ''
+        : `<label>Target closure</label>
+           <select id="lc-target">
+             ${siblingClosuresOnPole.map(cl => `<option value="${cl.id}">${h(cl.name)}</option>`).join('')}
+           </select>`;
+      html += `<div class="form-card">
+        ${targetOptions}
+        <label>Fiber count</label>
+        <input id="lc-fc" type="number" min="1" max="288" value="12">
+        <div class="btn-row">
+          <button class="primary" onclick="doLinkClosure()">Link</button>
+          <button onclick="state.showLinkClosure=false;renderPanel();">Cancel</button>
+        </div>
+      </div>`;
+    }
+  }
+
+  if (c.splices.length > 0) {
+    html += '<div class="section-title">Splice connections</div><div class="splice-list">';
+    c.splices.forEach(s => {
+      const fC = c.cables.find(x => x.id === s.from_cable_id);
+      const tC = c.cables.find(x => x.id === s.to_cable_id);
+      const fFc = FIBER_COLORS[s.from_fiber % 12];
+      const tFc = FIBER_COLORS[s.to_fiber % 12];
+      html += `<div class="splice-item">
+        <span class="fiber-dot" style="background:${fFc.bg};border:1.5px solid ${fFc.border};width:10px;height:10px;"></span>
+        <span>${h(fC?.name || '?')} F${s.from_fiber + 1}</span>
+        <span style="color:#888;">↔</span>
+        <span class="fiber-dot" style="background:${tFc.bg};border:1.5px solid ${tFc.border};width:10px;height:10px;"></span>
+        <span>${h(tC?.name || '?')} F${s.to_fiber + 1}</span>
+        <button class="del-btn" onclick="deleteSplice(${s.id})" title="Remove">🗑</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<div style="padding:10px;">
+    <button class="add-btn" onclick="deleteClosure(${c.id})" style="border-color:#ffcdd2;color:#c62828;">Delete closure</button>
+  </div>`;
+
+  document.getElementById('side-panel').innerHTML = html;
+}
+
+function toggleCable(cableId) {
+  if (panelState.expandedCables.has(cableId)) {
+    panelState.expandedCables.delete(cableId);
+    for (const k of [...panelState.expandedTubes]) {
+      if (k.startsWith(cableId + '-')) panelState.expandedTubes.delete(k);
+    }
+  } else {
+    panelState.expandedCables.add(cableId);
+  }
+  renderPanel();
+}
+
+function toggleTube(cableId, tubeIdx) {
+  const key = `${cableId}-${tubeIdx}`;
+  if (panelState.expandedTubes.has(key)) {
+    panelState.expandedTubes.delete(key);
+  } else {
+    panelState.expandedTubes.add(key);
+  }
+  renderPanel();
+}
+
+async function selectFiber(cableId, fiberIdx) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const sel = state.selectedFiber;
+  if (sel && sel.cableId !== cableId) {
+    // Create splice
+    const dup = c.splices.find(s =>
+      (s.from_cable_id === sel.cableId && s.from_fiber === sel.fiberIdx) ||
+      (s.to_cable_id === sel.cableId && s.to_fiber === sel.fiberIdx) ||
+      (s.from_cable_id === cableId && s.from_fiber === fiberIdx) ||
+      (s.to_cable_id === cableId && s.to_fiber === fiberIdx)
+    );
+    if (!dup) {
+      try {
+        const splice = await api('POST', '/splices', {
+          closure_id: c.id,
+          from_cable_id: sel.cableId, from_fiber: sel.fiberIdx,
+          to_cable_id: cableId, to_fiber: fiberIdx
+        });
+        c.splices.push(splice);
+      } catch (err) { alert('Failed: ' + err.message); }
+    }
+    state.selectedFiber = null;
+  } else if (sel && sel.cableId === cableId && sel.fiberIdx === fiberIdx) {
+    state.selectedFiber = null;
+  } else {
+    state.selectedFiber = { cableId, fiberIdx };
+  }
+  renderPanel();
+}
+
+async function deleteSplice(spliceId) {
+  if (!confirm('Delete this splice?')) return;
+  try {
+    await api('DELETE', '/splices/' + spliceId);
+    const c = state.closures.find(x => x.id === state.selectedClosure);
+    c.splices = c.splices.filter(s => s.id !== spliceId);
+    renderPanel();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function doAddCable() {
+  const cl = state.closures.find(x => x.id === state.selectedClosure);
+  if (!cl) return;
+  try {
+    if (cl.pole_id) {
+      const routeId = parseInt(document.getElementById('ac-route').value);
+      const route = state.routes.find(r => r.id === routeId);
+      if (!route) return;
+      if (Array.isArray(route.attached_poles) && route.attached_poles.length >= 2) {
+        const inCable  = await api('POST', `/closures/${cl.id}/cables`, { name: route.name, fiber_count: route.fiber_count, direction: 'IN',  route_id: route.id });
+        const outCable = await api('POST', `/closures/${cl.id}/cables`, { name: route.name, fiber_count: route.fiber_count, direction: 'OUT', route_id: route.id });
+        cl.cables.push(inCable, outCable);
+        panelState.expandedCables.add(inCable.id);
+        panelState.expandedCables.add(outCable.id);
+      } else {
+        const pole = state.poles.find(p => p.id === cl.pole_id);
+        let dir = 'IN';
+        if (pole) {
+          const THRESH = 1e-7;
+          const [pLng, pLat] = pole.geom.coordinates;
+          const coords = route.geom.coordinates;
+          const atStart = Math.abs(coords[0][1] - pLat) < THRESH && Math.abs(coords[0][0] - pLng) < THRESH;
+          if (atStart) dir = 'OUT';
+        }
+        const cable = await api('POST', `/closures/${cl.id}/cables`, { name: route.name, fiber_count: route.fiber_count, direction: dir, route_id: route.id });
+        cl.cables.push(cable);
+        panelState.expandedCables.add(cable.id);
+      }
+      state.showAddCable = false;
+      renderPanel();
+      renderMap();
+      return;
+    }
+    const name = document.getElementById('ac-name').value.trim();
+    const fc = parseInt(document.getElementById('ac-fc').value);
+    const dir = document.getElementById('ac-dir').value;
+    if (!name || !fc) return;
+    const cable = await api('POST', `/closures/${cl.id}/cables`, { name, fiber_count: fc, direction: dir });
+    cl.cables.push(cable);
+    panelState.expandedCables.add(cable.id);
+    if (Math.ceil(cable.fiber_count / 12) > 1) panelState.expandedTubes.add(`${cable.id}-0`);
+    state.showAddCable = false;
+    renderPanel();
+    renderMap();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deleteCable(cableId) {
+  if (!confirm('Delete this cable and all its splices?')) return;
+  try {
+    const c = state.closures.find(x => x.id === state.selectedClosure);
+    const cable = c.cables.find(ca => ca.id === cableId);
+    if (cable && cable.link_closure_id) {
+      const linked = state.closures.find(cl => cl.id === cable.link_closure_id);
+      if (linked && linked.cables) {
+        const paired = linked.cables.find(ca => ca.link_closure_id === c.id);
+        if (paired) {
+          await api('DELETE', '/cables/' + paired.id);
+          linked.cables = linked.cables.filter(ca => ca.id !== paired.id);
+          linked.splices = (linked.splices || []).filter(s => s.from_cable_id !== paired.id && s.to_cable_id !== paired.id);
+        }
+      }
+    }
+    await api('DELETE', '/cables/' + cableId);
+    c.cables = c.cables.filter(ca => ca.id !== cableId);
+    c.splices = c.splices.filter(s => s.from_cable_id !== cableId && s.to_cable_id !== cableId);
+    state.selectedFiber = null;
+    renderPanel();
+    renderMap();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function doLinkClosure() {
+  const cl = state.closures.find(x => x.id === state.selectedClosure);
+  if (!cl) return;
+  try {
+    const fc = parseInt(document.getElementById('lc-fc').value) || 12;
+    const siblings = state.closures.filter(sib => sib.pole_id === cl.pole_id && sib.id !== cl.id);
+    const targetEl = document.getElementById('lc-target');
+    const targetId = targetEl ? parseInt(targetEl.value) : siblings[0].id;
+    const target = state.closures.find(x => x.id === targetId);
+    if (!target) return;
+
+    const outCable = await api('POST', `/closures/${cl.id}/cables`, {
+      name: `→ ${target.name}`, fiber_count: fc, direction: 'OUT', link_closure_id: targetId
+    });
+    cl.cables.push(outCable);
+
+    const inCable = await api('POST', `/closures/${targetId}/cables`, {
+      name: `← ${cl.name}`, fiber_count: fc, direction: 'IN', link_closure_id: cl.id
+    });
+    if (!target.cables) target.cables = [];
+    target.cables.push(inCable);
+
+    state.showLinkClosure = false;
+    renderPanel();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deleteClosure(closureId) {
+  if (!confirm('Delete this closure and all its cables/splices?')) return;
+  try {
+    await api('DELETE', '/closures/' + closureId);
+    state.closures = state.closures.filter(c => c.id !== closureId);
+    closePanel();
+    renderMap();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+// ============ LAYERS PANEL ============
+function renderLayersPanel() {
+  const body = document.getElementById('map-layers-body');
+  if (!body) return;
+  if (!state.layerGroups.length) {
+    body.innerHTML = '<div style="padding:16px;color:#888;font-size:12px;text-align:center;">No groups yet.<br>Click + New Group to start.</div>';
+    return;
+  }
+  let html = '';
+  for (const g of state.layerGroups) {
+    const gVis = g.visible !== false;
+    const isDefault = g.name === 'Default';
+    html += `<div>
+      <div class="ml-group-hdr">
+        <button class="ml-vis-btn" onclick="toggleGroupVisibility(${g.id})" title="${gVis ? 'Hide group' : 'Show group'}">${gVis ? '👁' : '🚫'}</button>
+        <span style="flex:1;${!gVis ? 'opacity:.5;' : ''}">${h(g.name)}</span>
+        <button class="ml-action-btn" onclick="promptAddLayer(${g.id})" title="Add layer">+</button>
+        ${!isDefault ? `<button class="ml-action-btn" onclick="promptRenameGroup(${g.id})" title="Rename">✏️</button>` : ''}
+        ${!isDefault ? `<button class="ml-action-btn" onclick="promptDeleteGroup(${g.id})" title="Delete" style="color:#e53935;">🗑</button>` : ''}
+      </div>`;
+    for (const l of (g.layers || [])) {
+      const lVis = l.visible !== false;
+      const isActive = l.id === state.activeLayerId;
+      const isDefaultLayer = isDefault && l.name === 'Default';
+      const typePills = l.allowed_types?.length > 0
+        ? l.allowed_types.map(t => `<span style="font-size:9px;padding:1px 5px;background:#e3f2fd;border-radius:8px;color:#1565c0;">${t}</span>`).join(' ')
+        : '<span style="font-size:9px;color:#aaa;">any</span>';
+      html += `<div class="ml-layer-row ${isActive ? 'active-layer' : ''}" onclick="setActiveLayer(${l.id})">
+        <button class="ml-vis-btn" onclick="event.stopPropagation();toggleLayerVisibility(${l.id})" title="${lVis ? 'Hide' : 'Show'}">${lVis ? '👁' : '🚫'}</button>
+        <span style="flex:1;${!lVis ? 'opacity:.5;' : ''}">${h(l.name)}</span>
+        <span>${typePills}</span>
+        ${!isDefaultLayer ? `<button class="ml-action-btn" onclick="event.stopPropagation();promptRenameLayer(${l.id})" title="Rename">✏️</button>` : ''}
+        <button class="ml-action-btn" onclick="event.stopPropagation();promptEditLayerTypes(${l.id})" title="Set type restrictions">⚙️</button>
+        ${!isDefaultLayer ? `<button class="ml-action-btn" onclick="event.stopPropagation();promptDeleteLayer(${l.id})" title="Delete" style="color:#e53935;">🗑</button>` : ''}
+      </div>`;
+    }
+    html += '</div>';
+  }
+  body.innerHTML = html;
+}
+
+async function toggleGroupVisibility(id) {
+  const g = state.layerGroups.find(g => g.id === id);
+  if (!g) return;
+  g.visible = !g.visible;
+  renderLayersPanel();
+  renderMap();
+  try { await api('PUT', '/layer-groups/' + id, { visible: g.visible }); } catch (_) {}
+}
+
+async function toggleLayerVisibility(id) {
+  let newVis = true;
+  for (const g of state.layerGroups) {
+    const l = (g.layers || []).find(l => l.id === id);
+    if (l) { l.visible = !l.visible; newVis = l.visible; break; }
+  }
+  renderLayersPanel();
+  renderMap();
+  try { await api('PUT', '/layers/' + id, { visible: newVis }); } catch (_) {}
+}
+
+function promptCreateLayerGroup() {
+  showModal('New Group', '<label>Group name</label><input id="m-name" value="">', async () => {
+    const name = document.getElementById('m-name').value.trim();
+    if (!name) return false;
+    const g = await api('POST', '/layer-groups', { name });
+    g.layers = [];
+    state.layerGroups.push(g);
+    renderLayersPanel();
+    return true;
+  });
+}
+
+function promptRenameGroup(id) {
+  const g = state.layerGroups.find(g => g.id === id);
+  if (!g) return;
+  showModal('Rename Group', `<label>Group name</label><input id="m-name" value="${h(g.name)}">`, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    if (!name) return false;
+    await api('PUT', '/layer-groups/' + id, { name });
+    g.name = name;
+    renderLayersPanel();
+    return true;
+  });
+}
+
+function promptDeleteGroup(id) {
+  const g = state.layerGroups.find(g => g.id === id);
+  if (!g) return;
+  showModal('Delete Group', `<div style="color:#c62828;">Delete group "<strong>${h(g.name)}</strong>" and all its layers and features?<br><span style="font-size:12px;color:#888;">All poles, closures, routes, and sites in this group will be permanently deleted.</span></div>`, async () => {
+    const layerIds = new Set((g.layers || []).map(l => l.id));
+    await api('DELETE', '/layer-groups/' + id);
+    state.layerGroups = state.layerGroups.filter(x => x.id !== id);
+    state.poles    = state.poles.filter(p => !layerIds.has(p.layer_id));
+    state.closures = state.closures.filter(c => !layerIds.has(c.layer_id));
+    state.routes   = state.routes.filter(r => !layerIds.has(r.layer_id));
+    state.sites    = state.sites.filter(s => !layerIds.has(s.layer_id));
+    if (state.layerGroups.length && !state.layerGroups.flatMap(g => g.layers || []).find(l => l.id === state.activeLayerId)) {
+      const defLayer = state.layerGroups.find(g => g.name === 'Default')?.layers?.find(l => l.name === 'Default');
+      state.activeLayerId = defLayer?.id ?? null;
+      updateActiveLayerLabel();
+      updateToolbarRestrictions();
+    }
+    renderLayersPanel();
+    renderMap();
+    return true;
+  });
+}
+
+function promptAddLayer(groupId) {
+  const typeOpts = ['closure', 'route', 'pole', 'site'].map(t =>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="layer-type-opt" value="${t}"> ${t}</label>`
+  ).join('');
+  showModal('Add Layer', `
+    <label>Layer name</label><input id="m-name" value="">
+    <label style="margin-top:10px;">Allowed types (leave blank for any)</label>
+    <div style="border:1px solid #ddd;border-radius:5px;padding:6px 10px;margin-top:4px;">${typeOpts}</div>
+  `, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    if (!name) return false;
+    const allowed_types = [...document.querySelectorAll('.layer-type-opt:checked')].map(cb => cb.value);
+    const l = await api('POST', '/layer-groups/' + groupId + '/layers', { name, allowed_types });
+    const g = state.layerGroups.find(g => g.id === groupId);
+    if (g) { if (!g.layers) g.layers = []; g.layers.push(l); }
+    renderLayersPanel();
+    return true;
+  });
+}
+
+function promptRenameLayer(id) {
+  const l = state.layerGroups.flatMap(g => g.layers || []).find(l => l.id === id);
+  if (!l) return;
+  showModal('Rename Layer', `<label>Layer name</label><input id="m-name" value="${h(l.name)}">`, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    if (!name) return false;
+    await api('PUT', '/layers/' + id, { name });
+    l.name = name;
+    renderLayersPanel();
+    updateActiveLayerLabel();
+    return true;
+  });
+}
+
+function promptEditLayerTypes(id) {
+  const l = state.layerGroups.flatMap(g => g.layers || []).find(l => l.id === id);
+  if (!l) return;
+  const typeOpts = ['closure', 'route', 'pole', 'site'].map(t =>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="layer-type-opt" value="${t}"${(l.allowed_types||[]).includes(t)?' checked':''}> ${t}</label>`
+  ).join('');
+  showModal(`Types for "${h(l.name)}"`, `
+    <div style="font-size:12px;color:#666;margin-bottom:8px;">Check types this layer allows. Leave all unchecked for any type.</div>
+    <div style="border:1px solid #ddd;border-radius:5px;padding:6px 10px;">${typeOpts}</div>
+  `, async () => {
+    const allowed_types = [...document.querySelectorAll('.layer-type-opt:checked')].map(cb => cb.value);
+    await api('PUT', '/layers/' + id, { allowed_types });
+    l.allowed_types = allowed_types;
+    renderLayersPanel();
+    if (l.id === state.activeLayerId) updateToolbarRestrictions();
+    return true;
+  });
+}
+
+function promptDeleteLayer(id) {
+  const l = state.layerGroups.flatMap(g => g.layers || []).find(l => l.id === id);
+  if (!l) return;
+  showModal('Delete Layer', `<div style="color:#c62828;">Delete layer "<strong>${h(l.name)}</strong>"?<br><span style="font-size:12px;color:#888;">Items in this layer will become always-visible.</span></div>`, async () => {
+    await api('DELETE', '/layers/' + id);
+    for (const g of state.layerGroups) {
+      g.layers = (g.layers || []).filter(x => x.id !== id);
+    }
+    if (state.activeLayerId === id) {
+      const defLayer = state.layerGroups.find(g => g.name === 'Default')?.layers?.find(l => l.name === 'Default');
+      state.activeLayerId = defLayer?.id ?? null;
+      updateActiveLayerLabel();
+      updateToolbarRestrictions();
+    }
+    renderLayersPanel();
+    renderMap();
+    return true;
+  });
+}
+
+// ============ STARTUP ============
+checkSession();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Site — Open Fiber Map</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f6f8; color: #212121; min-height: 100vh; }
+
+  /* Top bar */
+  #topbar {
+    background: #1565c0; color: white; padding: 0 20px;
+    display: flex; align-items: center; gap: 14px; height: 48px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  }
+  #topbar .sep { opacity: .4; }
+  #site-title { font-size: 16px; font-weight: 600; }
+  #site-type-badge {
+    font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 12px; background: rgba(255,255,255,.2); margin-left: 4px;
+  }
+
+  /* Tabs */
+  #tabs {
+    background: white; border-bottom: 1px solid #e0e0e0;
+    display: flex; padding: 0 20px; gap: 0;
+  }
+  .site-tab {
+    padding: 12px 20px; border: none; border-bottom: 3px solid transparent;
+    background: none; cursor: pointer; font-size: 13px; color: #555; font-weight: 500;
+    transition: color .15s;
+  }
+  .site-tab:hover { color: #1565c0; }
+  .site-tab.active { border-bottom-color: #1565c0; color: #1565c0; font-weight: 600; }
+
+  /* Content area */
+  #tab-content { padding: 28px 28px; max-width: 900px; }
+
+  /* Cards */
+  .card {
+    background: white; border: 1px solid #e0e0e0; border-radius: 8px;
+    padding: 20px 24px; margin-bottom: 18px;
+  }
+  .card h3 { font-size: 13px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; }
+  .info-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { width: 140px; color: #777; flex-shrink: 0; }
+  .info-value { color: #212121; }
+
+  /* Placeholder */
+  .coming-soon {
+    border: 2px dashed #d0d0d0; border-radius: 8px; padding: 48px 24px;
+    text-align: center; color: #9e9e9e; margin-bottom: 18px;
+  }
+  .coming-soon .cs-icon { font-size: 48px; margin-bottom: 12px; }
+  .coming-soon h3 { font-size: 16px; font-weight: 600; color: #757575; margin-bottom: 6px; }
+  .coming-soon p { font-size: 13px; line-height: 1.5; }
+
+  /* Action buttons */
+  .btn { padding: 8px 16px; border-radius: 5px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .btn-primary { background: #1565c0; color: white; }
+  .btn-danger { background: #c62828; color: white; }
+  .btn-secondary { background: white; color: #333; border: 1px solid #ccc; }
+  .btn:hover { opacity: .85; }
+
+  /* Modal form elements */
+  .modal-label { display: block; font-size: 12px; font-weight: 600; color: #666; margin: 12px 0 4px; }
+  .modal-label:first-of-type { margin-top: 0; }
+  .modal-input { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 13px; }
+
+  #error-screen { display: none; text-align: center; padding: 80px 24px; color: #777; }
+  #loading-screen { text-align: center; padding: 80px 24px; color: #999; }
+  details[open] > summary .tube-arrow { display: inline-block; transform: rotate(90deg); }
+
+  /* Dark mode */
+  body.dark-mode { background: #111827; color: #f3f4f6; }
+  body.dark-mode .card { background: #1f2937; border-color: #374151; }
+  body.dark-mode .card h3 { color: #6b7280; }
+  body.dark-mode #tabs { background: #1f2937; border-bottom-color: #374151; }
+  body.dark-mode .site-tab { color: #9ca3af; }
+  body.dark-mode .site-tab:hover { color: #f3f4f6; }
+  body.dark-mode .site-tab.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+  body.dark-mode .info-row { border-bottom-color: #374151; }
+  body.dark-mode .info-label { color: #9ca3af; }
+  body.dark-mode .info-value { color: #f3f4f6; }
+  body.dark-mode .coming-soon { border-color: #374151; color: #6b7280; }
+  body.dark-mode .coming-soon h3 { color: #9ca3af; }
+  body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background: #111827; border-color: #374151; color: #f3f4f6; }
+  body.dark-mode .modal-label { color: #9ca3af; }
+  body.dark-mode .modal-input { background: #111827; border-color: #374151; color: #f3f4f6; }
+  body.dark-mode .btn-secondary { background: #374151; border-color: #4b5563; color: #d1d5db; }
+  /* Port tables — inline backgrounds/colors in generated rows need !important to override */
+  body.dark-mode .card table td,
+  body.dark-mode .card table th { background-color: #1f2937 !important; border-color: #374151 !important; color: #d1d5db; }
+  body.dark-mode .card table [style*="color:#283593"] { color: #93c5fd !important; }
+  body.dark-mode .card table [style*="color:#777"],
+  body.dark-mode .card table [style*="color:#888"] { color: #9ca3af !important; }
+</style>
+</head>
+<body>
+<script>if(localStorage.getItem('ofm-dark-mode')==='true')document.body.classList.add('dark-mode');</script>
+
+<div id="loading-screen">Loading site…</div>
+<div id="error-screen"><h2>Site not found</h2><p style="margin-top:8px;"><button onclick="goBackToMap()" style="background:none;border:none;cursor:pointer;color:#1565c0;font-size:14px;">← Back to map</button></p></div>
+
+<div id="app" style="display:none;">
+  <div id="topbar">
+    <button onclick="goBackToMap()" style="color:rgba(255,255,255,.8);background:none;border:none;cursor:pointer;font-size:13px;padding:0;">← Map</button>
+    <span class="sep">/</span>
+    <span id="site-title"></span>
+    <span id="site-type-badge"></span>
+  </div>
+
+  <div id="tabs">
+    <button class="site-tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+    <button class="site-tab" data-tab="equipment" onclick="switchTab('equipment')">Equipment</button>
+    <button class="site-tab" data-tab="patch-panels" onclick="switchTab('patch-panels')">Patch Panels</button>
+  </div>
+
+  <div id="tab-content">
+    <!-- Overview tab -->
+    <div id="tab-overview">
+      <div class="card">
+        <h3>Site Info</h3>
+        <div id="info-rows"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:18px;">
+        <button class="btn btn-secondary" onclick="openEditModal()">Edit site</button>
+        <button class="btn btn-danger" onclick="deleteSite()">Delete site</button>
+      </div>
+    </div>
+
+    <!-- Equipment tab -->
+    <div id="tab-equipment" style="display:none;">
+      <div id="equipment-list"></div>
+      <div class="card">
+        <h3>Add Equipment</h3>
+        <label class="modal-label">Template</label>
+        <select id="eq-template" class="modal-input" onchange="updateEqTemplateForm()"></select>
+        <div id="eq-sfp-config" style="display:none;margin-top:12px;"></div>
+        <label class="modal-label">Instance Name</label>
+        <input id="eq-name" class="modal-input" placeholder="e.g. OLT-1, Main Switch">
+        <label class="modal-label">Notes (optional)</label>
+        <input id="eq-notes" class="modal-input">
+        <div style="margin-top:14px;">
+          <button class="btn btn-primary" onclick="addEquipment()">Add Equipment</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Patch Panels tab -->
+    <div id="tab-patch-panels" style="display:none;">
+      <div id="patch-panels-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div id="edit-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:8px;padding:24px;width:400px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+    <h2 style="margin-bottom:16px;font-size:16px;">Edit Site</h2>
+    <label class="modal-label">Name</label>
+    <input id="edit-name" class="modal-input" style="margin-bottom:4px;">
+    <label class="modal-label">Notes</label>
+    <textarea id="edit-notes" rows="3" class="modal-input" style="resize:vertical;"></textarea>
+    <div id="edit-custom-fields"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Strand detail modal -->
+<div id="strand-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeStrandModal()">
+  <div style="background:white;border-radius:8px;width:560px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;" onclick="event.stopPropagation()">
+    <div style="padding:18px 24px 14px;border-bottom:1px solid #eee;flex-shrink:0;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div>
+          <h2 id="strand-modal-title" style="font-size:16px;margin-bottom:2px;"></h2>
+          <div id="strand-modal-sub" style="font-size:12px;color:#888;"></div>
+        </div>
+        <button onclick="closeStrandModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:#aaa;padding:0;line-height:1;flex-shrink:0;">✕</button>
+      </div>
+    </div>
+    <div style="overflow-y:auto;flex:1;">
+      <div id="strand-modal-body"></div>
+    </div>
+    <div style="padding:14px 24px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;">
+      <button class="btn btn-secondary" onclick="closeStrandModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStrandChanges()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Patch Panel modal -->
+<div id="panel-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:8px;padding:24px;width:360px;max-width:95vw;">
+    <h2 style="margin-bottom:16px;font-size:16px;">Add Patch Panel</h2>
+    <label class="modal-label">Panel Name</label>
+    <input id="panel-name" class="modal-input" placeholder="e.g. Main Panel">
+    <label class="modal-label">Default Connector</label>
+    <select id="panel-connector" class="modal-input"></select>
+    <p style="font-size:12px;color:#888;margin-top:8px;">This fiber will be assigned to the new panel.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closePanelModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewPanel()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Connect port modal -->
+<div id="connect-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeConnectModal()">
+  <div style="background:white;border-radius:8px;padding:24px;width:460px;max-width:95vw;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div id="connect-modal-title" style="font-size:14px;font-weight:700;margin-bottom:16px;"></div>
+
+    <div id="cstep-type">
+      <div class="modal-label">Connect to</div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button id="ctype-panel-btn" onclick="selectConnectType('panel')"
+          style="flex:1;padding:12px;border-radius:6px;border:2px solid #e0e0e0;background:white;cursor:pointer;font-size:13px;font-weight:600;color:#555;">
+          Patch Panel
+        </button>
+        <button id="ctype-equip-btn" onclick="selectConnectType('equipment')"
+          style="flex:1;padding:12px;border-radius:6px;border:2px solid #e0e0e0;background:white;cursor:pointer;font-size:13px;font-weight:600;color:#555;">
+          Equipment
+        </button>
+      </div>
+    </div>
+
+    <div id="cflow-panel" style="display:none;">
+      <div class="modal-label" style="margin-top:14px;">Panel</div>
+      <select id="cpanel-select" class="modal-input" onchange="updateConnectTubes()"></select>
+      <div id="cfiber1-label" style="display:none;font-size:11px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.4px;margin-top:12px;">● Fiber 1 (TX)</div>
+      <div id="ctube-section" style="display:none;margin-top:8px;">
+        <div class="modal-label">Buffer Tube</div>
+        <div id="ctube-grid" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+      </div>
+      <div id="cstrand-section" style="display:none;margin-top:14px;">
+        <div class="modal-label">Strand</div>
+        <div id="cstrand-grid" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;"></div>
+      </div>
+      <div id="cdual-fiber2" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed #d0d0d0;">
+        <div style="font-size:11px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">● Fiber 2 (RX)</div>
+        <div id="ctube-section-2" style="display:none;margin-top:4px;">
+          <div class="modal-label">Buffer Tube</div>
+          <div id="ctube-grid-2" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+        </div>
+        <div id="cstrand-section-2" style="display:none;margin-top:14px;">
+          <div class="modal-label">Strand</div>
+          <div id="cstrand-grid-2" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cflow-equip" style="display:none;">
+      <div class="modal-label" style="margin-top:14px;">Equipment</div>
+      <select id="cequip-select" class="modal-input" onchange="updateConnectPorts()"></select>
+      <div class="modal-label" style="margin-top:10px;">Port</div>
+      <select id="cport-select" class="modal-input"></select>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
+      <button class="btn btn-secondary" onclick="closeConnectModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConnection()">Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add patch jumper modal -->
+<div id="jumper-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeJumperModal()">
+  <div style="background:white;border-radius:8px;padding:24px;width:460px;max-width:95vw;max-height:88vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Add Patch Jumper</div>
+    <div class="modal-label">Side A — Panel</div>
+    <select id="jmp-panel-a" class="modal-input" onchange="updateJumperTubes('a')"></select>
+    <div id="jmp-tube-section-a" style="display:none;margin-top:10px;">
+      <div class="modal-label">Buffer Tube</div>
+      <div id="jmp-tube-grid-a" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;"></div>
+    </div>
+    <div id="jmp-strand-section-a" style="display:none;margin-top:10px;">
+      <div class="modal-label">Strand</div>
+      <div id="jmp-strand-grid-a" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;"></div>
+    </div>
+    <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;">
+      <div class="modal-label">Side B — Panel</div>
+      <select id="jmp-panel-b" class="modal-input" onchange="updateJumperTubes('b')"></select>
+      <div id="jmp-tube-section-b" style="display:none;margin-top:10px;">
+        <div class="modal-label">Buffer Tube</div>
+        <div id="jmp-tube-grid-b" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;"></div>
+      </div>
+      <div id="jmp-strand-section-b" style="display:none;margin-top:10px;">
+        <div class="modal-label">Strand</div>
+        <div id="jmp-strand-grid-b" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeJumperModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveJumper()">Add Jumper</button>
+    </div>
+  </div>
+</div>
+
+<!-- Equipment edit modal -->
+<div id="eq-edit-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeEqEditModal()">
+  <div style="background:white;border-radius:8px;padding:24px;width:400px;max-width:95vw;max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Edit Equipment</div>
+    <label class="modal-label">Name</label>
+    <input id="eq-edit-name" class="modal-input">
+    <label class="modal-label">Notes</label>
+    <input id="eq-edit-notes" class="modal-input">
+    <div id="eq-edit-custom-fields"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeEqEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEqEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Swap SFP modal -->
+<div id="swap-sfp-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeSwapSfpModal()">
+  <div style="background:white;border-radius:8px;padding:24px;width:380px;max-width:95vw;" onclick="event.stopPropagation()">
+    <div id="swap-sfp-title" style="font-size:14px;font-weight:700;margin-bottom:16px;"></div>
+    <label class="modal-label">SFP Type</label>
+    <select id="swap-sfp-select" class="modal-input"></select>
+    <p style="font-size:12px;color:#e65100;margin-top:10px;">Swapping removes all connections on this slot's ports.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeSwapSfpModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSwapSfp()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Swap Card modal -->
+<div id="swap-card-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeSwapCardModal()">
+  <div style="background:white;border-radius:8px;padding:24px;width:380px;max-width:95vw;" onclick="event.stopPropagation()">
+    <div id="swap-card-title" style="font-size:14px;font-weight:700;margin-bottom:16px;"></div>
+    <label class="modal-label">Card Type</label>
+    <select id="swap-card-select" class="modal-input"></select>
+    <p style="font-size:12px;color:#e65100;margin-top:10px;">Swapping removes all connections on ports in this card slot.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeSwapCardModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSwapCard()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TYPE_LABELS = { office: 'Office', pole_cabinet: 'Pole Cabinet', ground_cabinet: 'Ground Cabinet', hut: 'Hut' };
+let CONNECTOR_TYPES = [];
+const CONNECTOR_COLORS = {
+  'LC/UPC (Single)': '#1565c0',
+  'LC/UPC (Dual)':   '#1565c0',
+  'LC/APC':         '#2e7d32',
+  'SC/UPC':    '#1565c0',
+  'SC/APC':    '#2e7d32',
+  'ST/UPC':    '#1565c0',
+  'ST/APC':    '#2e7d32',
+  'FC/UPC':    '#1565c0',
+  'FC/APC':    '#2e7d32',
+  'MPO/MTP':   '#00838f',
+  'E2000/APC': '#2e7d32',
+  'MTRJ':      '#6a1b9a',
+  'SMA':       '#78909c',
+  'RJ45':      '#7b5e3a',
+  'Mixed':     '#f57c00',
+};
+const FIBER_COLORS = [
+  { name: 'Blue',   hex: '#1565c0' },
+  { name: 'Orange', hex: '#e65100' },
+  { name: 'Green',  hex: '#2e7d32' },
+  { name: 'Brown',  hex: '#4e342e' },
+  { name: 'Slate',  hex: '#78909c' },
+  { name: 'White',  hex: '#f5f5f5', border: true },
+  { name: 'Red',    hex: '#c62828' },
+  { name: 'Black',  hex: '#212121' },
+  { name: 'Yellow', hex: '#f9a825' },
+  { name: 'Violet', hex: '#6a1b9a' },
+  { name: 'Rose',   hex: '#f06292' },
+  { name: 'Aqua',   hex: '#00838f' },
+];
+
+const EQ_COLORS = { olt: '#1565c0', switch: '#00838f', router: '#00838f', splitter: '#e65100' };
+const EQ_LABELS = { olt: 'OLT', switch: 'Switch', router: 'Router', splitter: 'Splitter' };
+
+let site = null;
+let fieldDefs = [];
+let fieldValues = {};
+let siteRoutes = [];
+let patchPanels = [];
+let equipment = [];
+let jumpers = [];
+let equipTemplates = [];
+let sfpTypes = [];
+let cardTypes = [];
+let equipFieldDefs = [];
+let _equipFieldValuesCache = {};
+let _editingEqId = null;
+let _connectingPortId = null;
+let _connectSelection = null;
+let _connectingPortIsDual = false;
+let _connectingPortIsSharedFiber = false;
+let _connectSelectionDual = { f1: null, f2: null };
+let _jumperSelections = { a: null, b: null };
+let _swappingSlot = { equipId: null, slotNumber: null, cardSlot: 0 };
+let _swappingCard = { equipId: null, cardSlot: null };
+const collapsedSections = new Set();
+const siteId = parseInt(window.location.pathname.split('/').pop());
+
+async function apiFetch(method, path, body) {
+  const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || r.statusText); }
+  return r.json();
+}
+
+function goBackToMap() {
+  window.location.href = '/';
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function init() {
+  if (!siteId) { showError(); return; }
+  try {
+    const [siteRes, defsRes, valsRes, routesRes, panelsRes, connRes, equipRes, jumpRes, tmplRes, sfpRes, cardRes] = await Promise.all([
+      fetch('/api/sites/' + siteId, { credentials: 'include' }),
+      fetch('/api/field-defs', { credentials: 'include' }),
+      fetch('/api/field-values/site/' + siteId, { credentials: 'include' }),
+      fetch('/api/sites/' + siteId + '/routes', { credentials: 'include' }),
+      fetch('/api/sites/' + siteId + '/patch-panels', { credentials: 'include' }),
+      fetch('/api/connector-types', { credentials: 'include' }),
+      fetch('/api/sites/' + siteId + '/equipment', { credentials: 'include' }),
+      fetch('/api/sites/' + siteId + '/jumpers', { credentials: 'include' }),
+      fetch('/api/equipment-templates', { credentials: 'include' }),
+      fetch('/api/sfp-types', { credentials: 'include' }),
+      fetch('/api/card-types', { credentials: 'include' }),
+    ]);
+    if (siteRes.status === 401) { window.location.href = '/'; return; }
+    if (!siteRes.ok) { showError(); return; }
+    site = await siteRes.json();
+    const allDefs = defsRes.ok ? await defsRes.json() : [];
+    fieldDefs = allDefs.filter(d => d.entity_type === 'site');
+    equipFieldDefs = allDefs.filter(d => d.entity_type === 'equipment');
+    const vals = valsRes.ok ? await valsRes.json() : [];
+    fieldValues = {};
+    vals.forEach(v => { fieldValues[v.field_def_id] = v.value; });
+    siteRoutes = routesRes.ok ? await routesRes.json() : [];
+    patchPanels = panelsRes.ok ? await panelsRes.json() : [];
+    const allConnTypes = connRes.ok ? await connRes.json() : [];
+    CONNECTOR_TYPES = allConnTypes.filter(c => c.enabled).map(c => c.name);
+    equipment = equipRes.ok ? await equipRes.json() : [];
+    jumpers = jumpRes.ok ? await jumpRes.json() : [];
+    equipTemplates = tmplRes.ok ? await tmplRes.json() : [];
+    sfpTypes = sfpRes.ok ? await sfpRes.json() : [];
+    cardTypes = cardRes.ok ? await cardRes.json() : [];
+    populateEqTemplateSelect();
+    render();
+    renderEquipment();
+    renderPatchPanels();
+  } catch (e) {
+    showError();
+  }
+}
+
+function render() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+
+  const label = TYPE_LABELS[site.site_type] || site.site_type;
+  document.title = site.name + ' — Open Fiber Map';
+  document.getElementById('site-title').textContent = site.name;
+  document.getElementById('site-type-badge').textContent = label;
+
+  let rows = `
+    <div class="info-row"><span class="info-label">Name</span><span class="info-value">${esc(site.name)}</span></div>
+    <div class="info-row"><span class="info-label">Type</span><span class="info-value">${esc(label)}</span></div>
+    <div class="info-row"><span class="info-label">Notes</span><span class="info-value">${site.notes ? esc(site.notes) : '<em style="color:#aaa">—</em>'}</span></div>
+  `;
+  fieldDefs.forEach(d => {
+    const val = fieldValues[d.id] || '';
+    rows += `<div class="info-row">
+      <span class="info-label">${esc(d.field_label)}</span>
+      <span class="info-value">${val ? esc(val) : '<em style="color:#aaa">—</em>'}</span>
+    </div>`;
+  });
+  document.getElementById('info-rows').innerHTML = rows;
+}
+
+function renderPatchPanels() {
+  const el = document.getElementById('patch-panels-content');
+  const assignedRouteIds = new Set(patchPanels.flatMap(p => p.fibers.map(f => f.route_id)));
+  const unspliced = siteRoutes.filter(r => !assignedRouteIds.has(r.id));
+
+  let html = '';
+
+  patchPanels.forEach(p => {
+    const defaultColor = CONNECTOR_COLORS[p.default_connector] || '#888';
+    const fiberRows = p.fibers.map(f => `<tr>
+      <td style="padding:7px 10px;">
+        <span style="display:inline-block;width:11px;height:11px;border-radius:2px;
+          background:${esc(f.color||'#FF8800')};margin-right:6px;vertical-align:middle;"></span>${esc(f.route_name)}
+      </td>
+      <td style="padding:7px 10px;color:#888;">${f.fiber_count}F</td>
+      <td style="padding:7px 10px;">
+        <button class="btn btn-secondary" style="font-size:12px;padding:3px 10px;"
+          onclick="openStrandModal(${f.id}, '${esc(p.name)}', '${esc(p.default_connector)}')">Open</button>
+      </td>
+    </tr>`).join('');
+    const emptyRow = `<tr><td colspan="3" style="padding:12px 10px;color:#aaa;text-align:center;font-size:13px;">No fibers assigned</td></tr>`;
+    html += `<div class="card" style="margin-bottom:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div>
+          <h3 style="display:inline;margin-bottom:0;">${esc(p.name)}</h3>
+          <span style="margin-left:8px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;
+            background:${defaultColor}22;color:${defaultColor};">${esc(p.default_connector)}</span>
+        </div>
+        <button class="btn btn-danger" style="font-size:12px;padding:4px 10px;"
+          onclick="deletePanel(${p.id})">Delete</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr>
+          <th style="padding:5px 10px;text-align:left;color:#888;font-weight:600;font-size:12px;border-bottom:1px solid #eee;">Fiber</th>
+          <th style="padding:5px 10px;text-align:left;color:#888;font-weight:600;font-size:12px;border-bottom:1px solid #eee;">Count</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
+        <tbody>${p.fibers.length ? fiberRows : emptyRow}</tbody>
+      </table>
+    </div>`;
+  });
+
+  if (unspliced.length) {
+    const rows = unspliced.map(r => `<tr>
+      <td style="padding:7px 10px;">
+        <span style="display:inline-block;width:11px;height:11px;border-radius:2px;
+          background:${esc(r.color||'#FF8800')};margin-right:6px;vertical-align:middle;"></span>${esc(r.name)}
+      </td>
+      <td style="padding:7px 10px;">${r.fiber_count}F</td>
+      <td style="padding:7px 10px;">
+        <button class="btn btn-primary" style="font-size:11px;padding:3px 9px;"
+          onclick="openAddPanelModal(${r.id})">+ Add Patch Panel</button>
+      </td>
+    </tr>`).join('');
+    html += `<div class="card">
+      <h3>Unspliced Fibers</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr>
+          <th style="padding:5px 10px;text-align:left;color:#888;font-weight:600;font-size:12px;border-bottom:1px solid #eee;">Fiber</th>
+          <th style="padding:5px 10px;text-align:left;color:#888;font-weight:600;font-size:12px;border-bottom:1px solid #eee;">Count</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  } else if (!patchPanels.length) {
+    html += `<div class="coming-soon">
+      <div class="cs-icon">🔌</div>
+      <h3>No connected fibers yet</h3>
+      <p>Snap a fiber route endpoint to this site while drawing, then add a patch panel.</p>
+    </div>`;
+  }
+
+  // Jumpers section
+  const jumperRows = jumpers.map(j => `<tr>
+    <td style="padding:7px 10px;font-size:13px;">${esc(j.a_panel_name)} › ${esc(j.a_route_name)} › Strand ${j.a_strand}</td>
+    <td style="padding:7px 10px;color:#999;font-size:13px;">→</td>
+    <td style="padding:7px 10px;font-size:13px;">${esc(j.b_panel_name)} › ${esc(j.b_route_name)} › Strand ${j.b_strand}</td>
+    <td style="padding:7px 4px;">
+      <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+        onclick="disconnectJumper(${j.id})">Disconnect</button>
+    </td>
+  </tr>`).join('');
+  html += `<div class="card">
+    <h3>Patch Jumpers</h3>
+    ${jumpers.length ? `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+      <tbody>${jumperRows}</tbody>
+    </table>` : `<p style="font-size:13px;color:#aaa;margin-bottom:12px;">No jumpers yet.</p>`}
+    <button class="btn btn-secondary" style="font-size:12px;" onclick="openJumperModal()">+ Add Jumper</button>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+let _pendingRouteId = null;
+
+function openAddPanelModal(routeId) {
+  _pendingRouteId = routeId || null;
+  const sel = document.getElementById('panel-connector');
+  sel.innerHTML =
+    `<option value="Mixed">Mixed (set per fiber)</option>` +
+    `<option disabled>──────────────</option>` +
+    CONNECTOR_TYPES.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('panel-name').value = '';
+  document.getElementById('panel-modal-bg').style.display = 'flex';
+}
+
+function closePanelModal() {
+  document.getElementById('panel-modal-bg').style.display = 'none';
+}
+
+async function saveNewPanel() {
+  const name = document.getElementById('panel-name').value.trim();
+  const default_connector = document.getElementById('panel-connector').value;
+  if (!name) return;
+  try {
+    const body = { name, default_connector };
+    if (_pendingRouteId) body.route_id = _pendingRouteId;
+    const panel = await apiFetch('POST', '/api/sites/' + siteId + '/patch-panels', body);
+    patchPanels.push(panel);
+    closePanelModal();
+    renderPatchPanels();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+let _strandData = null;
+let _strandOverrideMap = {};
+let _pendingStrandChanges = {};
+
+function buildStrandModal(data, overrideMap) {
+  const isMixed = data.default_connector === 'Mixed';
+  const tubeCount = Math.ceil(data.fiber_count / 12);
+  let html = '';
+  for (let t = 0; t < tubeCount; t++) {
+    const tubeColor = FIBER_COLORS[t % 12];
+    const startStrand = t * 12 + 1;
+    const endStrand = Math.min((t + 1) * 12, data.fiber_count);
+
+    let hasOverride = false, hasUnset = false;
+    let uniformConnector = undefined, allSame = true;
+    for (let i = startStrand; i <= endStrand; i++) {
+      const hasPending = Object.prototype.hasOwnProperty.call(_pendingStrandChanges, i);
+      const val = hasPending ? _pendingStrandChanges[i] : (overrideMap[i] || (isMixed ? '' : data.default_connector));
+      if (isMixed && !val) hasUnset = true;
+      if (val) hasOverride = true;
+      if (uniformConnector === undefined) { uniformConnector = val; }
+      else if (uniformConnector !== val) { allSame = false; }
+    }
+    const tubeValue = (allSame && uniformConnector) ? uniformConnector : '';
+    const badgeColor = isMixed
+      ? (hasUnset ? '#f57c00' : (hasOverride ? '#2e7d32' : null))
+      : (hasOverride ? '#1565c0' : null);
+    const badge = badgeColor
+      ? `<span class="tube-badge" style="width:7px;height:7px;border-radius:50%;background:${badgeColor};display:inline-block;margin-left:6px;vertical-align:middle;flex-shrink:0;"></span>` : '';
+
+    let rows = '';
+    for (let i = startStrand; i <= endStrand; i++) {
+      const fc = FIBER_COLORS[(i - 1) % 12];
+      const saved = overrideMap[i] || null;
+      const hasPending = Object.prototype.hasOwnProperty.call(_pendingStrandChanges, i);
+      const pending = hasPending ? _pendingStrandChanges[i] : undefined;
+      const effective = pending !== undefined ? pending : (saved || (isMixed ? '' : data.default_connector));
+      const isUnset = isMixed && !effective;
+      const connColor = isUnset ? '#f57c00' : (CONNECTOR_COLORS[effective] || '#888');
+      const placeholderOpt = isMixed ? `<option value=""${!effective ? ' selected' : ''}>— Unset —</option>` : '';
+      const opts = CONNECTOR_TYPES.map(c =>
+        `<option value="${c}"${c === effective ? ' selected' : ''}>${c}</option>`).join('');
+      rows += `<tr>
+        <td style="padding:5px 12px;color:#777;width:36px;">${i}</td>
+        <td style="padding:5px 12px;">
+          <span style="display:inline-flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:11px;height:11px;border-radius:2px;
+              background:${fc.hex};${fc.border ? 'border:1px solid #ccc;' : ''}"></span>
+            <span style="color:#555;font-size:12px;">${fc.name}</span>
+          </span>
+        </td>
+        <td style="padding:5px 12px;">
+          <select data-strand="${i}" onchange="onStrandChange(this)"
+            style="font-size:12px;padding:2px 6px;border:2px solid ${connColor};
+            border-radius:4px;background:white;color:${connColor};font-weight:600;">${placeholderOpt}${opts}</select>
+        </td>
+      </tr>`;
+    }
+
+    html += `<details style="border-bottom:1px solid #f0f0f0;">
+      <summary style="list-style:none;padding:10px 16px;cursor:pointer;display:flex;
+        align-items:center;gap:8px;user-select:none;font-size:13px;">
+        <span style="display:inline-block;width:13px;height:13px;border-radius:2px;flex-shrink:0;
+          background:${tubeColor.hex};${tubeColor.border ? 'border:1px solid #ccc;' : ''}"></span>
+        <span style="font-weight:600;">Tube ${t + 1}</span>
+        <span style="color:#999;font-size:12px;">Fibers ${startStrand}–${endStrand}</span>
+        ${badge}
+        <select data-start="${startStrand}" data-end="${endStrand}"
+          onclick="event.stopPropagation()" onchange="setTubeConnector(this)"
+          style="font-size:11px;padding:1px 4px;border:1px solid #ddd;border-radius:4px;
+          color:#777;background:white;margin-left:auto;margin-right:6px;cursor:pointer;">
+          <option value=""${!tubeValue ? ' selected' : ''}>Set tube…</option>
+          ${isMixed ? `<option value="">— Unset all —</option>` : ''}
+          ${CONNECTOR_TYPES.map(c => `<option value="${c}"${c === tubeValue ? ' selected' : ''}>${c}</option>`).join('')}
+        </select>
+        <span class="tube-arrow" style="color:#bbb;font-size:11px;">▸</span>
+      </summary>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;background:#fafafa;">
+        <tbody>${rows}</tbody>
+      </table>
+    </details>`;
+  }
+  return html;
+}
+
+async function openStrandModal(panelFiberId, panelName, panelDefault) {
+  _pendingStrandChanges = {};
+  try {
+    const data = await apiFetch('GET', '/api/panel-fibers/' + panelFiberId + '/strands');
+    _strandData = data;
+    document.getElementById('strand-modal-title').textContent = panelName + ' / ' + data.route_name;
+    document.getElementById('strand-modal-sub').textContent =
+      data.fiber_count + ' fibers · Default: ' + data.default_connector;
+    const overrideMap = {};
+    data.strands.forEach(s => { overrideMap[s.strand_number] = s.connector; });
+    _strandOverrideMap = overrideMap;
+    document.getElementById('strand-modal-body').innerHTML = buildStrandModal(data, overrideMap);
+    document.getElementById('strand-modal-bg').style.display = 'flex';
+  } catch (err) { alert('Failed to load strands: ' + err.message); }
+}
+
+function closeStrandModal() {
+  document.getElementById('strand-modal-bg').style.display = 'none';
+  _strandData = null;
+  _strandOverrideMap = {};
+  _pendingStrandChanges = {};
+}
+
+function onStrandChange(selectEl) {
+  const strand = parseInt(selectEl.dataset.strand);
+  const connector = selectEl.value;
+  _pendingStrandChanges[strand] = connector;
+  const connColor = connector ? (CONNECTOR_COLORS[connector] || '#888') : '#f57c00';
+  selectEl.style.borderColor = connColor;
+  selectEl.style.color = connColor;
+  const detailsEl = selectEl.closest('details');
+  if (detailsEl) {
+    const tubeSel = detailsEl.querySelector('summary select');
+    const start = parseInt(tubeSel.dataset.start);
+    const end = parseInt(tubeSel.dataset.end);
+    updateTubeBadge(detailsEl, start, end);
+  }
+}
+
+function setTubeConnector(selectEl) {
+  const connector = selectEl.value;
+  if (connector === '' && (!_strandData || _strandData.default_connector !== 'Mixed')) {
+    selectEl.value = '';
+    return;
+  }
+  const start = parseInt(selectEl.dataset.start);
+  const end = parseInt(selectEl.dataset.end);
+  for (let i = start; i <= end; i++) {
+    _pendingStrandChanges[i] = connector;
+    const strandSel = document.querySelector(`select[data-strand="${i}"]`);
+    if (strandSel) {
+      strandSel.value = connector;
+      const connColor = connector ? (CONNECTOR_COLORS[connector] || '#888') : '#f57c00';
+      strandSel.style.borderColor = connColor;
+      strandSel.style.color = connColor;
+    }
+  }
+  selectEl.value = connector; // show the applied connector (or '' for unset-all)
+  updateTubeBadge(selectEl.closest('details'), start, end);
+}
+
+function updateTubeBadge(detailsEl, startStrand, endStrand) {
+  const isMixed = _strandData && _strandData.default_connector === 'Mixed';
+  const panelDefault = _strandData ? _strandData.default_connector : '';
+  let hasOverride = false, hasUnset = false;
+  let uniformConnector = undefined, allSame = true;
+  for (let i = startStrand; i <= endStrand; i++) {
+    const hasPending = Object.prototype.hasOwnProperty.call(_pendingStrandChanges, i);
+    const val = hasPending ? _pendingStrandChanges[i] : (_strandOverrideMap[i] || (isMixed ? '' : panelDefault));
+    if (isMixed && !val) hasUnset = true;
+    if (val) hasOverride = true;
+    if (uniformConnector === undefined) { uniformConnector = val; }
+    else if (uniformConnector !== val) { allSame = false; }
+  }
+  const tubeValue = (allSame && uniformConnector) ? uniformConnector : '';
+
+  // sync tube select
+  const tubeSel = detailsEl.querySelector('summary select');
+  if (tubeSel) tubeSel.value = tubeValue;
+
+  // sync badge dot
+  const badgeColor = isMixed
+    ? (hasUnset ? '#f57c00' : (hasOverride ? '#2e7d32' : null))
+    : (hasOverride ? '#1565c0' : null);
+  const summary = detailsEl.querySelector('summary');
+  let badge = summary.querySelector('.tube-badge');
+  if (badgeColor) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'tube-badge';
+      badge.style.cssText = 'width:7px;height:7px;border-radius:50%;display:inline-block;margin-left:6px;vertical-align:middle;flex-shrink:0;';
+      const tubeLabel = summary.querySelector('span:nth-child(2)');
+      tubeLabel.after(badge);
+    }
+    badge.style.background = badgeColor;
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+async function saveStrandChanges() {
+  if (!_strandData || !Object.keys(_pendingStrandChanges).length) { closeStrandModal(); return; }
+  const panel_fiber_id = _strandData.id;
+  const panel_default = _strandData.default_connector;
+  try {
+    await Promise.all(Object.entries(_pendingStrandChanges).map(([strand_number, connector]) =>
+      apiFetch('PUT', '/api/panel-fiber-strands',
+        { panel_fiber_id, strand_number: parseInt(strand_number), connector, panel_default })
+    ));
+    closeStrandModal();
+  } catch (err) { alert('Failed to save: ' + err.message); }
+}
+
+async function deletePanel(panelId) {
+  if (!confirm('Delete this patch panel? Fibers will return to Unspliced.')) return;
+  try {
+    await apiFetch('DELETE', '/api/patch-panels/' + panelId);
+    patchPanels = patchPanels.filter(p => p.id !== panelId);
+    renderPatchPanels();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function showError() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('error-screen').style.display = 'block';
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.site-tab').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('#tab-content > div').forEach(d => d.style.display = 'none');
+  document.getElementById('tab-' + tab).style.display = '';
+}
+
+function openEditModal() {
+  document.getElementById('edit-name').value = site.name;
+  document.getElementById('edit-notes').value = site.notes || '';
+
+  let customHtml = '';
+  if (fieldDefs.length) {
+    customHtml = '<div style="margin-top:12px;border-top:1px solid #eee;padding-top:12px;">';
+    fieldDefs.forEach(d => {
+      const val = fieldValues[d.id] || '';
+      customHtml += `<label class="modal-label">${esc(d.field_label)}</label>`;
+      if (d.field_type === 'dropdown') {
+        const opts = (d.options || []).map(o => `<option value="${esc(o)}"${val===o?' selected':''}>${esc(o)}</option>`).join('');
+        customHtml += `<select data-def="${d.id}" class="modal-input"><option value=""></option>${opts}</select>`;
+      } else {
+        customHtml += `<input data-def="${d.id}" class="modal-input" value="${esc(val)}">`;
+      }
+    });
+    customHtml += '</div>';
+  }
+  document.getElementById('edit-custom-fields').innerHTML = customHtml;
+  document.getElementById('edit-modal-bg').style.display = 'flex';
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal-bg').style.display = 'none';
+}
+
+async function saveEdit() {
+  const name = document.getElementById('edit-name').value.trim();
+  if (!name) return;
+  const notes = document.getElementById('edit-notes').value.trim();
+
+  const r = await fetch('/api/sites/' + siteId, {
+    method: 'PUT', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, notes })
+  });
+  if (!r.ok) return;
+  site = await r.json();
+
+  if (fieldDefs.length) {
+    const values = {};
+    document.querySelectorAll('[data-def]').forEach(el => { values[el.dataset.def] = el.value; });
+    const vr = await fetch('/api/field-values/site/' + siteId, {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values })
+    });
+    if (vr.ok) {
+      fieldValues = {};
+      Object.entries(values).forEach(([defId, value]) => { if (value) fieldValues[parseInt(defId)] = value; });
+    }
+  }
+
+  closeEditModal();
+  render();
+}
+
+async function deleteSite() {
+  if (!confirm(`Delete "${site.name}"? This cannot be undone.`)) return;
+  const r = await fetch('/api/sites/' + siteId, { method: 'DELETE', credentials: 'include' });
+  if (r.ok) window.location.href = '/';
+}
+
+// ── Equipment ──────────────────────────────────────────────────────────────
+
+function buildPortRow(p, eq) {
+  const connLabel = p.connector_type
+    ? `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${CONNECTOR_COLORS[p.connector_type]||'#888'};margin-right:4px;vertical-align:middle;"></span>${esc(p.connector_type)}`
+    : '<span style="color:#aaa;">—</span>';
+  const conns = p.connections || [];
+  let connectedCell, actionBtn;
+  if (conns.length === 0) {
+    connectedCell = `<span style="color:#aaa;font-size:12px;">— unconnected —</span>`;
+    actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="openConnectModal(${p.id})">Connect</button>`;
+  } else if (conns.length === 1) {
+    const c = conns[0];
+    const dest = c.other_type === 'equipment_port'
+      ? `${esc(c.other_equipment_name)} › ${esc(c.other_port_label)}`
+      : `${esc(c.other_panel_name)} › ${esc(c.other_route_name)} › Strand ${c.other_strand}`;
+    connectedCell = `<span style="font-size:12px;">${dest}</span>`;
+    actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="disconnectPort(${c.id}, null, ${eq.id}, ${p.id})">Disconnect</button>`;
+  } else {
+    const pairId = conns[0].pair_id;
+    const lines = conns.map((c, i) => {
+      const dest = c.other_type === 'equipment_port'
+        ? `${esc(c.other_equipment_name)} › ${esc(c.other_port_label)}`
+        : `${esc(c.other_panel_name)} › ${esc(c.other_route_name)} › Strand ${c.other_strand}`;
+      return `<div style="font-size:12px;">F${i+1}: ${dest}</div>`;
+    }).join('');
+    connectedCell = lines;
+    actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="disconnectPort(null, ${pairId}, ${eq.id}, ${p.id})">Disconnect</button>`;
+  }
+  return `<tr>
+    <td style="padding:6px 10px;font-size:13px;">${esc(p.port_label)}</td>
+    <td style="padding:6px 10px;">${connLabel}</td>
+    <td style="padding:6px 10px;">${connectedCell}</td>
+    <td style="padding:6px 4px;white-space:nowrap;">${actionBtn}
+      <button class="btn btn-secondary" style="font-size:11px;padding:2px 6px;margin-left:4px;"
+        onclick="deletePort(${eq.id}, ${p.id})" title="Delete port">✕</button>
+    </td>
+  </tr>`;
+}
+
+// Renders slot ports as a single row when all ports are shared-fiber (1 physical fiber, N logical ports)
+function buildSharedFiberPortRow(ports, eq) {
+  if (!ports.length) return '';
+  if (!ports.every(p => p.is_shared_fiber)) return ports.map(p => buildPortRow(p, eq)).join('');
+  const first = ports[0];
+  const last = ports[ports.length - 1];
+  const labelRange = first.port_label === last.port_label
+    ? esc(first.port_label)
+    : `${esc(first.port_label)} – ${esc(last.port_label)}`;
+  const connLabel = first.connector_type
+    ? `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${CONNECTOR_COLORS[first.connector_type]||'#888'};margin-right:4px;vertical-align:middle;"></span>${esc(first.connector_type)}`
+    : '<span style="color:#aaa;">—</span>';
+  const conns = first.connections || [];
+  let connectedCell, actionBtn;
+  if (conns.length === 0) {
+    connectedCell = `<span style="color:#aaa;font-size:12px;">— unconnected —</span>`;
+    actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="openConnectModal(${first.id})">Connect</button>`;
+  } else {
+    const c = conns[0];
+    const dest = c.other_type === 'equipment_port'
+      ? `${esc(c.other_equipment_name)} › ${esc(c.other_port_label)}`
+      : `${esc(c.other_panel_name)} › ${esc(c.other_route_name)} › Strand ${c.other_strand}`;
+    connectedCell = `<span style="font-size:12px;">${dest}</span>`;
+    const pairId = c.pair_id || c.id;
+    actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="disconnectPort(null, ${pairId}, ${eq.id}, ${first.id})">Disconnect</button>`;
+  }
+  return `<tr>
+    <td style="padding:6px 10px;font-size:13px;">${labelRange}</td>
+    <td style="padding:6px 10px;">${connLabel}</td>
+    <td style="padding:6px 10px;">${connectedCell}</td>
+    <td style="padding:6px 4px;white-space:nowrap;">${actionBtn}</td>
+  </tr>`;
+}
+
+function toggleCollapse(id) {
+  if (collapsedSections.has(id)) collapsedSections.delete(id);
+  else collapsedSections.add(id);
+  renderEquipment();
+}
+
+function colBtn(id) {
+  const c = collapsedSections.has(id);
+  return `<button onclick="event.stopPropagation();toggleCollapse('${id}')" style="background:none;border:none;cursor:pointer;padding:0 3px;font-size:11px;color:inherit;line-height:1;flex-shrink:0;">${c ? '▶' : '▼'}</button>`;
+}
+
+function renderEquipment() {
+  const el = document.getElementById('equipment-list');
+  if (!equipment.length) { el.innerHTML = ''; return; }
+  el.innerHTML = equipment.map(eq => {
+    const color = EQ_COLORS[eq.equipment_type] || '#888';
+    const label = EQ_LABELS[eq.equipment_type] || eq.equipment_type;
+    const tmpl = equipTemplates.find(t => t.id === eq.template_id);
+    const sfpAssignments = eq.sfp_assignments || [];
+
+    let portTableRows = '';
+    const tableHeader = `<thead><tr>
+      <th style="padding:4px 10px;text-align:left;color:#888;font-size:11px;font-weight:600;border-bottom:1px solid #eee;">Port</th>
+      <th style="padding:4px 10px;text-align:left;color:#888;font-size:11px;font-weight:600;border-bottom:1px solid #eee;">Connector</th>
+      <th style="padding:4px 10px;text-align:left;color:#888;font-size:11px;font-weight:600;border-bottom:1px solid #eee;">Connected To</th>
+      <th style="border-bottom:1px solid #eee;"></th>
+    </tr></thead>`;
+
+    if (tmpl?.card_slot_count) {
+      // Chassis path: static ports first, then one section per card slot
+      const staticPorts = eq.ports.filter(p => p.card_slot == null);
+      if (staticPorts.length && tmpl.port_groups) {
+        tmpl.port_groups.filter(g => g.kind === 'fixed').forEach(group => {
+          const groupPorts = staticPorts.filter(p => p.port_group_id === group.id);
+          if (!groupPorts.length) return;
+          const grpColId = `eq-${eq.id}-g-${group.id}`;
+          const grpCollapsed = collapsedSections.has(grpColId);
+          portTableRows += `<tr>
+            <td colspan="4" style="padding:3px 10px;background:#f5f7fa;border-top:1px solid #e8e8e8;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                ${colBtn(grpColId)}
+                <span style="font-size:10px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.4px;">${esc(group.label)}</span>
+              </div>
+            </td></tr>`;
+          if (!grpCollapsed) portTableRows += groupPorts.map(p => buildPortRow(p, eq)).join('');
+        });
+      }
+      const cardAssignments = eq.card_assignments || [];
+      for (let cardSlot = 1; cardSlot <= tmpl.card_slot_count; cardSlot++) {
+        const ca = cardAssignments.find(a => a.card_slot === cardSlot);
+        const cardPrefix = (tmpl.card_slot_prefix_pattern || '{n}/').replace('{n}', cardSlot);
+        const slotBg = cardSlot % 2 === 0 ? '#f0f4ff' : '#f5f7fa';
+        const cardColId = `eq-${eq.id}-cs-${cardSlot}`;
+        const cardCollapsed = collapsedSections.has(cardColId);
+        portTableRows += `<tr>
+          <td colspan="4" style="padding:5px 10px;background:#e8eaf6;border-top:2px solid #c5cae9;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${colBtn(cardColId)}
+              <span style="font-size:11px;font-weight:700;color:#283593;">SLOT ${cardSlot} [${esc(cardPrefix)}]</span>
+              ${ca ? `<span style="font-size:11px;background:#e8eaf6;color:#283593;padding:1px 6px;border-radius:8px;font-weight:600;">${esc(ca.card_name)}</span>` : `<span style="font-size:11px;color:#aaa;">empty</span>`}
+              <div style="margin-left:auto;display:flex;gap:4px;">
+                <button class="btn btn-secondary" style="font-size:10px;padding:1px 7px;"
+                  onclick="openSwapCardModal(${eq.id}, ${cardSlot}, ${ca ? ca.card_type_id : 'null'})">${ca ? 'Swap Card' : 'Insert Card'}</button>
+                ${ca ? `<button class="btn btn-danger" style="font-size:10px;padding:1px 7px;"
+                  onclick="removeCard(${eq.id}, ${cardSlot})">Remove</button>` : ''}
+              </div>
+            </div>
+          </td></tr>`;
+        if (!cardCollapsed && ca) {
+          const cardPortGroups = ca.card_port_groups || [];
+          const cardPorts = eq.ports.filter(p => p.card_slot === cardSlot);
+          const cardSfpAsgns = sfpAssignments.filter(a => a.card_slot === cardSlot);
+          cardPortGroups.forEach(group => {
+            const groupPorts = cardPorts.filter(p => p.port_group_id === group.id);
+            const grpColId = `eq-${eq.id}-cs-${cardSlot}-g-${group.id}`;
+            const grpCollapsed = collapsedSections.has(grpColId);
+            portTableRows += `<tr>
+              <td colspan="4" style="padding:3px 10px;background:${slotBg};border-top:1px solid #e0e0e0;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  ${colBtn(grpColId)}
+                  <span style="font-size:10px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.4px;">${esc(group.label)}</span>
+                </div>
+              </td></tr>`;
+            if (!grpCollapsed) {
+              if (group.kind === 'fixed') {
+                portTableRows += groupPorts.map(p => buildPortRow(p, eq)).join('');
+              } else {
+                const maxPerSlot = group.max_ports_per_slot || 1;
+                for (let slot = 1; slot <= group.count; slot++) {
+                  const asgn = cardSfpAsgns.find(a => a.port_group_id === group.id && a.slot_number === slot);
+                  const slotPorts = groupPorts.filter(p => p.slot_number === slot);
+                  const pfx = group.label_prefix || group.id;
+                  const startPort = (slot - 1) * maxPerSlot + 1;
+                  const endPort = slot * maxPerSlot;
+                  const slotLabel = maxPerSlot > 1 ? `${pfx}${startPort} – ${pfx}${endPort}` : `${pfx}${startPort}`;
+                  portTableRows += `<tr>
+                    <td colspan="4" style="padding:3px 10px 3px 20px;background:${slotBg};">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:11px;color:#666;">${esc(slotLabel)}</span>
+                        ${asgn ? `<span style="font-size:11px;background:#e3f2fd;color:#1565c0;padding:1px 5px;border-radius:8px;">${esc(asgn.sfp_name)}</span>` : `<span style="font-size:11px;color:#aaa;">empty</span>`}
+                        <button class="btn btn-secondary" style="font-size:10px;padding:1px 6px;margin-left:auto;"
+                          onclick="openSwapSfpModal(${eq.id}, ${slot}, '${group.id}', '${group.port_type || ''}', ${asgn?.sfp_type_id || 'null'}, ${cardSlot})">${asgn ? 'Swap SFP' : 'Insert SFP'}</button>
+                      </div>
+                    </td></tr>`;
+                  portTableRows += buildSharedFiberPortRow(slotPorts, eq);
+                }
+              }
+            }
+          });
+        }
+      }
+      if (!portTableRows) {
+        portTableRows = `<tr><td colspan="4" style="padding:10px;color:#aaa;text-align:center;font-size:13px;">No card slots defined</td></tr>`;
+      }
+    } else if (tmpl?.port_groups) {
+      // Non-chassis port_groups path: one section per group
+      let anyPorts = false;
+      tmpl.port_groups.forEach(group => {
+        const groupPorts = eq.ports.filter(p => p.port_group_id === group.id);
+        const grpColId = `eq-${eq.id}-g-${group.id}`;
+        const grpCollapsed = collapsedSections.has(grpColId);
+        if (group.kind === 'fixed') {
+          if (!groupPorts.length) return;
+          anyPorts = true;
+          portTableRows += `<tr>
+            <td colspan="4" style="padding:3px 10px;background:#f5f7fa;border-top:1px solid #e8e8e8;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                ${colBtn(grpColId)}
+                <span style="font-size:10px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.4px;">${esc(group.label)}</span>
+              </div>
+            </td></tr>`;
+          if (!grpCollapsed) portTableRows += groupPorts.map(p => buildPortRow(p, eq)).join('');
+        } else {
+          anyPorts = true;
+          portTableRows += `<tr>
+            <td colspan="4" style="padding:3px 10px;background:#f5f7fa;border-top:1px solid #e8e8e8;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                ${colBtn(grpColId)}
+                <span style="font-size:10px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.4px;">${esc(group.label)}</span>
+              </div>
+            </td></tr>`;
+          if (!grpCollapsed) {
+            for (let slot = 1; slot <= group.count; slot++) {
+              const asgn = sfpAssignments.find(a => a.port_group_id === group.id && a.slot_number === slot);
+              const slotPorts = groupPorts.filter(p => p.slot_number === slot);
+              const slotLabel = `${(group.label_prefix || group.id).toUpperCase()} ${slot}`;
+              portTableRows += `<tr>
+                <td colspan="4" style="padding:4px 10px;background:#f5f7fa;border-top:1px solid #e8e8e8;">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:11px;font-weight:700;color:#555;">${esc(slotLabel)}</span>
+                    ${asgn ? `<span style="font-size:11px;background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:8px;font-weight:600;">${esc(asgn.sfp_name)}</span>` : `<span style="font-size:11px;color:#aaa;">empty</span>`}
+                    <button class="btn btn-secondary" style="font-size:10px;padding:1px 7px;margin-left:auto;"
+                      onclick="openSwapSfpModal(${eq.id}, ${slot}, '${group.id}', '${group.port_type || ''}', ${asgn?.sfp_type_id || 'null'})">${asgn ? 'Swap SFP' : 'Insert SFP'}</button>
+                  </div>
+                </td></tr>`;
+              portTableRows += buildSharedFiberPortRow(slotPorts, eq);
+            }
+          }
+        }
+      });
+      if (!anyPorts) {
+        portTableRows = `<tr><td colspan="4" style="padding:10px;color:#aaa;text-align:center;font-size:13px;">No ports — add one below</td></tr>`;
+      }
+    } else {
+      // Legacy path
+      const fixedPorts = eq.ports.filter(p => p.slot_number == null);
+      if (fixedPorts.length) {
+        portTableRows += fixedPorts.map(p => buildPortRow(p, eq)).join('');
+      }
+      if (sfpAssignments.length) {
+        sfpAssignments.sort((a, b) => a.slot_number - b.slot_number).forEach(asgn => {
+          const slotPorts = eq.ports.filter(p => p.slot_number === asgn.slot_number);
+          const slotPrefix = tmpl?.sfp_slot_prefix || 'Card';
+          portTableRows += `<tr>
+            <td colspan="4" style="padding:4px 10px;background:#f5f7fa;border-top:1px solid #e8e8e8;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:11px;font-weight:700;color:#555;">${esc(slotPrefix)} ${asgn.slot_number}</span>
+                <span style="font-size:11px;background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:8px;font-weight:600;">${esc(asgn.sfp_name)}</span>
+                <button class="btn btn-secondary" style="font-size:10px;padding:1px 7px;margin-left:auto;"
+                  onclick="openSwapSfpModal(${eq.id}, ${asgn.slot_number}, null, null, ${asgn.sfp_type_id})">Swap SFP</button>
+              </div>
+            </td></tr>`;
+          portTableRows += buildSharedFiberPortRow(slotPorts, eq);
+        });
+      }
+      if (!fixedPorts.length && !sfpAssignments.length) {
+        portTableRows = `<tr><td colspan="4" style="padding:10px;color:#aaa;text-align:center;font-size:13px;">No ports — add one below</td></tr>`;
+      }
+    }
+
+    const eqColId = `eq-${eq.id}`;
+    const eqCollapsed = collapsedSections.has(eqColId);
+    return `<div class="card" data-eq-id="${eq.id}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;${eqCollapsed ? '' : 'margin-bottom:14px;'}">
+        ${colBtn(eqColId)}
+        <span style="background:${color};color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">${esc(label)}</span>
+        <span style="font-size:14px;font-weight:600;">${esc(eq.name)}</span>
+        ${eq.model ? `<span style="font-size:12px;color:#999;">${esc(eq.model)}</span>` : ''}
+        ${eq.notes ? `<span style="font-size:12px;color:#aaa;font-style:italic;">${esc(eq.notes)}</span>` : ''}
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+            onclick="openEqEditModal(${eq.id})">Edit</button>
+          <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;"
+            onclick="deleteEquipment(${eq.id})">Delete</button>
+        </div>
+      </div>
+      <div style="${eqCollapsed ? 'display:none;' : ''}">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;">
+          ${tableHeader}
+          <tbody>${portTableRows}</tbody>
+        </table>
+        <div id="add-port-form-${eq.id}" style="display:none;margin-top:8px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input id="port-label-${eq.id}" class="modal-input" style="width:140px;" placeholder="Port label">
+            <select id="port-conn-${eq.id}" class="modal-input" style="width:130px;">
+              <option value="">No connector</option>
+              ${CONNECTOR_TYPES.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+            <button class="btn btn-primary" style="font-size:12px;" onclick="addPort(${eq.id})">Add</button>
+            <button class="btn btn-secondary" style="font-size:12px;" onclick="toggleAddPortForm(${eq.id})">Cancel</button>
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="add-port-btn-${eq.id}" style="font-size:12px;"
+          onclick="toggleAddPortForm(${eq.id})">+ Add Port</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleAddPortForm(equipId) {
+  const form = document.getElementById('add-port-form-' + equipId);
+  const btn = document.getElementById('add-port-btn-' + equipId);
+  const showing = form.style.display !== 'none';
+  form.style.display = showing ? 'none' : 'block';
+  btn.style.display = showing ? '' : 'none';
+}
+
+function populateEqTemplateSelect() {
+  const sel = document.getElementById('eq-template');
+  if (!sel) return;
+  const typeLabels = { olt: 'OLT', switch: 'Switch', router: 'Router', splitter: 'Splitter' };
+  const grouped = {};
+  equipTemplates.forEach(t => {
+    const g = typeLabels[t.equipment_type] || t.equipment_type;
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(t);
+  });
+  let html = '<option value="">— Select template —</option>';
+  Object.entries(grouped).forEach(([group, templates]) => {
+    html += `<optgroup label="${esc(group)}">`;
+    templates.forEach(t => { html += `<option value="${t.id}">${esc(t.name)}</option>`; });
+    html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+  updateEqTemplateForm();
+}
+
+function updateEqTemplateForm() {
+  const tmplId = parseInt(document.getElementById('eq-template').value);
+  const tmpl = equipTemplates.find(t => t.id === tmplId);
+  const sfpDiv = document.getElementById('eq-sfp-config');
+  if (!tmpl) { sfpDiv.style.display = 'none'; return; }
+
+  if (tmpl.card_slot_count) {
+    // Chassis template: show card slot pickers, hide port prefix
+    const cardOpts = cardTypes.map(ct => `<option value="${ct.id}">${esc(ct.name)}</option>`).join('');
+    let html = `<div class="modal-label" style="margin-bottom:8px;">Card Assignments</div>`;
+    for (let slot = 1; slot <= tmpl.card_slot_count; slot++) {
+      const cardPrefix = (tmpl.card_slot_prefix_pattern || '{n}/').replace('{n}', slot);
+      html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;">
+        <span style="font-size:12px;color:#666;min-width:100px;">Slot ${slot} [${esc(cardPrefix)}]</span>
+        <select id="eq-card-${slot}" class="modal-input" style="flex:1;">
+          <option value="">— Empty slot —</option>${cardOpts}
+        </select>
+      </div>`;
+    }
+    sfpDiv.innerHTML = html;
+    sfpDiv.style.display = '';
+  } else if (tmpl.port_groups) {
+    // Non-chassis port_groups path
+    const sfpGroups = tmpl.port_groups.filter(g => g.kind === 'sfp_slot');
+    if (!sfpGroups.length) { sfpDiv.style.display = 'none'; return; }
+    let html = `<div class="modal-label" style="margin-bottom:8px;">SFP Assignments</div>`;
+    sfpGroups.forEach(group => {
+      const portType = group.port_type;
+      const compatSfps = sfpTypes.filter(s => {
+        const compat = s.compatible_port_types || [];
+        return compat.length === 0 || compat.includes(portType);
+      });
+      if (!compatSfps.length) return;
+      const sfpOpts = compatSfps.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+      html += `<div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px;">${esc(group.label)}</div>`;
+      for (let slot = 1; slot <= group.count; slot++) {
+        html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;">
+          <span style="font-size:12px;color:#666;min-width:80px;">${esc(group.label_prefix || group.id).toUpperCase()} ${slot}</span>
+          <select id="eq-sfp-${group.id}-${slot}" class="modal-input" style="flex:1;">
+            <option value="">— No SFP —</option>${sfpOpts}
+          </select>
+        </div>`;
+      }
+    });
+    sfpDiv.innerHTML = html;
+    sfpDiv.style.display = '';
+  } else if (tmpl.sfp_slot_count) {
+    // Legacy path
+    const sfpOpts = sfpTypes.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    let html = `<div class="modal-label" style="margin-bottom:8px;">SFP Assignments</div>`;
+    for (let i = 1; i <= tmpl.sfp_slot_count; i++) {
+      html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <span style="font-size:12px;color:#666;min-width:70px;">${esc(tmpl.sfp_slot_prefix || 'Card')} ${i}</span>
+        <select id="eq-sfp-${i}" class="modal-input" style="flex:1;">
+          <option value="">— No SFP —</option>${sfpOpts}
+        </select>
+      </div>`;
+    }
+    sfpDiv.innerHTML = html;
+    sfpDiv.style.display = '';
+  } else {
+    sfpDiv.style.display = 'none';
+  }
+}
+
+async function addEquipment() {
+  const name = document.getElementById('eq-name').value.trim();
+  const template_id = parseInt(document.getElementById('eq-template').value) || null;
+  const notes = document.getElementById('eq-notes').value.trim();
+  if (!name) { alert('Name required'); return; }
+  if (!template_id) { alert('Select a template'); return; }
+  const tmpl = equipTemplates.find(t => t.id === template_id);
+  let payload;
+  if (tmpl?.card_slot_count) {
+    // Chassis template: collect card assignments
+    const card_assignments = [];
+    for (let slot = 1; slot <= tmpl.card_slot_count; slot++) {
+      const sel = document.getElementById(`eq-card-${slot}`);
+      if (sel?.value) card_assignments.push({ card_slot: slot, card_type_id: parseInt(sel.value) });
+    }
+    payload = { name, template_id, notes, card_assignments };
+  } else {
+    const sfp_assignments = [];
+    if (tmpl?.port_groups) {
+      tmpl.port_groups.filter(g => g.kind === 'sfp_slot').forEach(group => {
+        for (let slot = 1; slot <= group.count; slot++) {
+          const sel = document.getElementById(`eq-sfp-${group.id}-${slot}`);
+          if (sel?.value) sfp_assignments.push({ group_id: group.id, slot_number: slot, sfp_type_id: parseInt(sel.value) });
+        }
+      });
+    } else if (tmpl?.sfp_slot_count) {
+      for (let i = 1; i <= tmpl.sfp_slot_count; i++) {
+        const sel = document.getElementById('eq-sfp-' + i);
+        if (sel?.value) sfp_assignments.push({ slot_number: i, sfp_type_id: parseInt(sel.value) });
+      }
+    }
+    payload = { name, template_id, notes, sfp_assignments };
+  }
+  try {
+    const eq = await apiFetch('POST', '/api/sites/' + siteId + '/equipment', payload);
+    equipment.push(eq);
+    document.getElementById('eq-name').value = '';
+    document.getElementById('eq-notes').value = '';
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deleteEquipment(id) {
+  if (!confirm('Delete this equipment and all its ports?')) return;
+  try {
+    await apiFetch('DELETE', '/api/equipment/' + id);
+    // clear any connections from other equipment that pointed to this equipment's ports
+    const deletedPortIds = new Set((equipment.find(e => e.id === id)?.ports || []).map(p => p.id));
+    equipment = equipment.filter(e => e.id !== id);
+    equipment.forEach(e => {
+      e.ports.forEach(p => {
+        if (p.connection && p.connection.other_port_id && deletedPortIds.has(p.connection.other_port_id)) {
+          p.connection = null;
+        }
+      });
+    });
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function addPort(equipId) {
+  const label = document.getElementById('port-label-' + equipId).value.trim();
+  const connector_type = document.getElementById('port-conn-' + equipId).value;
+  if (!label) { alert('Port label required'); return; }
+  try {
+    const port = await apiFetch('POST', '/api/equipment/' + equipId + '/ports', { port_label: label, connector_type });
+    const eq = equipment.find(e => e.id === equipId);
+    if (eq) eq.ports.push(port);
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deletePort(equipId, portId) {
+  if (!confirm('Delete this port?')) return;
+  try {
+    await apiFetch('DELETE', '/api/equipment-ports/' + portId);
+    const eq = equipment.find(e => e.id === equipId);
+    if (eq) eq.ports = eq.ports.filter(p => p.id !== portId);
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function disconnectPort(connectionId, pairId, equipId, portId) {
+  if (!confirm('Disconnect this port?')) return;
+  try {
+    if (pairId != null) {
+      await apiFetch('DELETE', '/api/connections/pair/' + pairId);
+      equipment.forEach(e => {
+        e.ports.forEach(p => {
+          if (p.connections) p.connections = p.connections.filter(c => c.pair_id !== pairId && c.id !== pairId);
+        });
+      });
+    } else {
+      await apiFetch('DELETE', '/api/connections/' + connectionId);
+      equipment.forEach(e => {
+        e.ports.forEach(p => {
+          if (p.connections) p.connections = p.connections.filter(c => c.id !== connectionId);
+        });
+      });
+    }
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+// ── Equipment edit modal ───────────────────────────────────────────────────
+
+async function openEqEditModal(equipId) {
+  _editingEqId = equipId;
+  const eq = equipment.find(e => e.id === equipId);
+  if (!eq) return;
+  document.getElementById('eq-edit-name').value = eq.name;
+  document.getElementById('eq-edit-notes').value = eq.notes || '';
+
+  let customHtml = '';
+  if (equipFieldDefs.length) {
+    let cached = _equipFieldValuesCache[equipId];
+    if (!cached) {
+      try {
+        const vals = await apiFetch('GET', '/api/field-values/equipment/' + equipId);
+        cached = {};
+        vals.forEach(v => { cached[v.field_def_id] = v.value; });
+        _equipFieldValuesCache[equipId] = cached;
+      } catch (e) { cached = {}; }
+    }
+    customHtml = '<div style="margin-top:12px;border-top:1px solid #eee;padding-top:12px;">';
+    equipFieldDefs.forEach(d => {
+      const val = cached[d.id] || '';
+      customHtml += `<label class="modal-label">${esc(d.field_label)}</label>`;
+      if (d.field_type === 'dropdown') {
+        const opts = (d.options || []).map(o => `<option value="${esc(o)}"${val===o?' selected':''}>${esc(o)}</option>`).join('');
+        customHtml += `<select data-def="${d.id}" class="modal-input"><option value=""></option>${opts}</select>`;
+      } else {
+        customHtml += `<input data-def="${d.id}" class="modal-input" value="${esc(val)}">`;
+      }
+    });
+    customHtml += '</div>';
+  }
+  document.getElementById('eq-edit-custom-fields').innerHTML = customHtml;
+  document.getElementById('eq-edit-modal-bg').style.display = 'flex';
+}
+
+function closeEqEditModal() {
+  document.getElementById('eq-edit-modal-bg').style.display = 'none';
+  _editingEqId = null;
+}
+
+async function saveEqEdit() {
+  const id = _editingEqId;
+  if (!id) return;
+  const name = document.getElementById('eq-edit-name').value.trim();
+  if (!name) { alert('Name required'); return; }
+  const notes = document.getElementById('eq-edit-notes').value.trim();
+  try {
+    const updated = await apiFetch('PUT', '/api/equipment/' + id, { name, notes });
+    const eq = equipment.find(e => e.id === id);
+    if (eq) { eq.name = updated.name; eq.notes = updated.notes; }
+
+    if (equipFieldDefs.length) {
+      const values = {};
+      document.querySelectorAll('#eq-edit-custom-fields [data-def]').forEach(el => { values[el.dataset.def] = el.value; });
+      await apiFetch('PUT', '/api/field-values/equipment/' + id, { values });
+      const cached = {};
+      Object.entries(values).forEach(([defId, value]) => { if (value) cached[parseInt(defId)] = value; });
+      _equipFieldValuesCache[id] = cached;
+    }
+    closeEqEditModal();
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+// ── Swap SFP modal ─────────────────────────────────────────────────────────
+
+function openSwapSfpModal(equipId, slotNumber, groupId, portType, currentSfpTypeId, cardSlot = 0) {
+  _swappingSlot = { equipId, slotNumber, groupId: groupId || 'default', portType, cardSlot };
+  const eq = equipment.find(e => e.id === equipId);
+  const tmpl = equipTemplates.find(t => t.id === eq?.template_id);
+  let group = null;
+  if (cardSlot > 0) {
+    const ca = (eq?.card_assignments || []).find(a => a.card_slot === cardSlot);
+    group = (ca?.card_port_groups || []).find(g => g.id === groupId);
+  } else {
+    group = tmpl?.port_groups?.find(g => g.id === groupId);
+  }
+  const slotLabel = group
+    ? `${(group.label_prefix || group.id).toUpperCase()} ${slotNumber}`
+    : `${tmpl?.sfp_slot_prefix || 'Slot'} ${slotNumber}`;
+  const cardLabel = cardSlot > 0 ? ` (Card ${cardSlot})` : '';
+  document.getElementById('swap-sfp-title').textContent = `Swap SFP — ${slotLabel}${cardLabel}`;
+  const compatSfps = sfpTypes.filter(s => {
+    if (!portType) return true;
+    const compat = s.compatible_port_types || [];
+    return compat.length === 0 || compat.includes(portType);
+  });
+  const opts = compatSfps.map(s =>
+    `<option value="${s.id}"${s.id === currentSfpTypeId ? ' selected' : ''}>${esc(s.name)}</option>`
+  ).join('');
+  document.getElementById('swap-sfp-select').innerHTML = `<option value="">— Remove SFP —</option>${opts}`;
+  document.getElementById('swap-sfp-modal-bg').style.display = 'flex';
+}
+
+function closeSwapSfpModal() {
+  document.getElementById('swap-sfp-modal-bg').style.display = 'none';
+  _swappingSlot = { equipId: null, slotNumber: null, cardSlot: 0 };
+}
+
+async function saveSwapSfp() {
+  const { equipId, slotNumber, groupId, cardSlot } = _swappingSlot;
+  if (!equipId) return;
+  const sfp_type_id = parseInt(document.getElementById('swap-sfp-select').value) || null;
+  try {
+    await apiFetch('PUT', '/api/equipment/' + equipId + '/sfp/' + slotNumber, {
+      sfp_type_id, port_group_id: groupId || 'default', card_slot: cardSlot || 0
+    });
+    equipment = await apiFetch('GET', '/api/sites/' + siteId + '/equipment');
+    closeSwapSfpModal();
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+// ── Swap Card modal ────────────────────────────────────────────────────────
+
+function openSwapCardModal(equipId, cardSlot, currentCardTypeId) {
+  _swappingCard = { equipId, cardSlot };
+  const tmpl = equipTemplates.find(t => t.id === (equipment.find(e => e.id === equipId)?.template_id));
+  const cardPrefix = (tmpl?.card_slot_prefix_pattern || '{n}/').replace('{n}', cardSlot);
+  document.getElementById('swap-card-title').textContent = `Insert Card — Slot ${cardSlot} [${cardPrefix}]`;
+  const opts = cardTypes.map(ct =>
+    `<option value="${ct.id}"${ct.id === currentCardTypeId ? ' selected' : ''}>${esc(ct.name)}</option>`
+  ).join('');
+  document.getElementById('swap-card-select').innerHTML = `<option value="">— Remove card —</option>${opts}`;
+  document.getElementById('swap-card-modal-bg').style.display = 'flex';
+}
+
+function closeSwapCardModal() {
+  document.getElementById('swap-card-modal-bg').style.display = 'none';
+  _swappingCard = { equipId: null, cardSlot: null };
+}
+
+async function saveSwapCard() {
+  const { equipId, cardSlot } = _swappingCard;
+  if (!equipId) return;
+  const card_type_id = parseInt(document.getElementById('swap-card-select').value) || null;
+  try {
+    await apiFetch('PUT', '/api/equipment/' + equipId + '/card/' + cardSlot, { card_type_id });
+    equipment = await apiFetch('GET', '/api/sites/' + siteId + '/equipment');
+    closeSwapCardModal();
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function removeCard(equipId, cardSlot) {
+  if (!confirm(`Remove card from slot ${cardSlot}? This will delete all ports and connections in this slot.`)) return;
+  try {
+    await apiFetch('PUT', '/api/equipment/' + equipId + '/card/' + cardSlot, { card_type_id: null });
+    equipment = await apiFetch('GET', '/api/sites/' + siteId + '/equipment');
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+// ── Connect port modal ─────────────────────────────────────────────────────
+
+function openConnectModal(portId) {
+  _connectingPortId = portId;
+  _connectSelection = null;
+  _connectSelectionDual = { f1: null, f2: null };
+
+  let portLabel = '', equipName = '', portConnectorType = '', portType = '';
+  for (const eq of equipment) {
+    const p = eq.ports.find(p => p.id === portId);
+    if (p) {
+      portLabel = p.port_label; equipName = eq.name;
+      portConnectorType = p.connector_type || ''; portType = p.port_type || '';
+      _connectingPortIsSharedFiber = p.is_shared_fiber === true;
+      break;
+    }
+  }
+  _connectingPortIsDual = portConnectorType === 'LC/UPC (Dual)';
+  const isCopperPort = portType === 'copper' || portConnectorType === 'RJ45';
+  document.getElementById('connect-modal-title').textContent = 'Connect: ' + equipName + ' / ' + portLabel;
+
+  // Populate panel select
+  document.getElementById('cpanel-select').innerHTML = patchPanels.filter(p => p.fibers.length)
+    .map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+
+  // Populate equipment select
+  document.getElementById('cequip-select').innerHTML = equipment
+    .map(eq => `<option value="${eq.id}">${esc(eq.name)}</option>`).join('');
+
+  // Copper ports can only connect to other equipment ports, not patch panels
+  document.getElementById('ctype-panel-btn').style.display = isCopperPort ? 'none' : '';
+
+  // Reset UI state
+  document.getElementById('cflow-panel').style.display = 'none';
+  document.getElementById('cflow-equip').style.display = 'none';
+  document.getElementById('ctube-section').style.display = 'none';
+  document.getElementById('cstrand-section').style.display = 'none';
+  document.getElementById('cfiber1-label').style.display = 'none';
+  document.getElementById('cdual-fiber2').style.display = 'none';
+  document.getElementById('ctube-section-2').style.display = 'none';
+  document.getElementById('cstrand-section-2').style.display = 'none';
+  ['ctype-panel-btn', 'ctype-equip-btn'].forEach(id => {
+    const btn = document.getElementById(id);
+    btn.style.borderColor = '#e0e0e0';
+    btn.style.background = 'white';
+    btn.style.color = '#555';
+  });
+
+  // Auto-select equipment flow for copper ports
+  if (isCopperPort) selectConnectType('equipment');
+
+  updateConnectPorts();
+  document.getElementById('connect-modal-bg').style.display = 'flex';
+}
+
+function selectConnectType(type) {
+  _connectSelection = null;
+  const isPanel = type === 'panel';
+  const panelBtn = document.getElementById('ctype-panel-btn');
+  const equipBtn = document.getElementById('ctype-equip-btn');
+  panelBtn.style.borderColor = isPanel ? '#1565c0' : '#e0e0e0';
+  panelBtn.style.background  = isPanel ? '#e3f2fd' : 'white';
+  panelBtn.style.color       = isPanel ? '#1565c0' : '#555';
+  equipBtn.style.borderColor = !isPanel ? '#1565c0' : '#e0e0e0';
+  equipBtn.style.background  = !isPanel ? '#e3f2fd' : 'white';
+  equipBtn.style.color       = !isPanel ? '#1565c0' : '#555';
+  document.getElementById('cflow-panel').style.display = isPanel ? '' : 'none';
+  document.getElementById('cflow-equip').style.display = !isPanel ? '' : 'none';
+  if (isPanel) updateConnectTubes();
+}
+
+function buildTubeChips(panel, onclickFn) {
+  let chips = '';
+  panel.fibers.forEach(fiber => {
+    const tubeCount = Math.ceil(fiber.fiber_count / 12);
+    for (let t = 0; t < tubeCount; t++) {
+      const fc = FIBER_COLORS[t % 12];
+      const start = t * 12 + 1;
+      const end = Math.min((t + 1) * 12, fiber.fiber_count);
+      const border = fc.border ? 'border:1px solid #bbb;' : '';
+      const fiberLabel = panel.fibers.length > 1
+        ? `<div style="font-size:9px;color:#777;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70px;">${esc(fiber.route_name)}</div>` : '';
+      chips += `<div onclick="${onclickFn}(${fiber.id},${t},${fiber.fiber_count})"
+        data-fiber="${fiber.id}" data-tube="${t}" data-count="${fiber.fiber_count}"
+        style="cursor:pointer;border-radius:6px;border:2px solid transparent;padding:6px 8px;
+          background:${fc.hex}22;text-align:center;min-width:62px;"
+        title="${esc(fiber.route_name)} · Fibers ${start}–${end}">
+        <div style="display:flex;align-items:center;gap:5px;justify-content:center;">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${fc.hex};${border}flex-shrink:0;"></span>
+          <span style="font-size:12px;font-weight:600;color:#333;">Tube ${t + 1}</span>
+        </div>
+        <div style="font-size:10px;color:#777;margin-top:2px;">${start}–${end}</div>
+        ${fiberLabel}
+      </div>`;
+    }
+  });
+  return chips;
+}
+
+function buildStrandChips(panelFiberId, tubeIndex, fiberCount, onclickFn) {
+  const start = tubeIndex * 12 + 1;
+  const end = Math.min((tubeIndex + 1) * 12, fiberCount);
+  let chips = '';
+  for (let s = start; s <= end; s++) {
+    const fc = FIBER_COLORS[(s - 1) % 12];
+    const border = fc.border ? 'border:1px solid #bbb;' : '';
+    chips += `<div onclick="${onclickFn}(${panelFiberId},${s},this)"
+      style="cursor:pointer;border-radius:6px;border:2px solid transparent;padding:5px 7px;
+        background:${fc.hex}22;text-align:center;min-width:52px;">
+      <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+        <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${fc.hex};${border}flex-shrink:0;"></span>
+        <span style="font-size:12px;font-weight:600;color:#333;">${s}</span>
+      </div>
+      <div style="font-size:10px;color:#777;margin-top:1px;">${fc.name}</div>
+    </div>`;
+  }
+  return chips;
+}
+
+function updateConnectTubes() {
+  _connectSelection = null;
+  if (_connectingPortIsDual) _connectSelectionDual = { f1: null, f2: null };
+  document.getElementById('cstrand-section').style.display = 'none';
+  const panelId = parseInt(document.getElementById('cpanel-select').value);
+  const panel = patchPanels.find(p => p.id === panelId);
+  if (!panel) return;
+
+  // Fiber 1 tube grid (or the only tube grid for non-dual)
+  const f1onclick = _connectingPortIsDual ? 'selectConnectTubeDual1' : 'selectConnectTube';
+  document.getElementById('ctube-grid').innerHTML = buildTubeChips(panel, f1onclick);
+  document.getElementById('ctube-section').style.display = '';
+  document.getElementById('cfiber1-label').style.display = _connectingPortIsDual ? '' : 'none';
+
+  // Auto-select if only 1 tube
+  const allChips = document.querySelectorAll('#ctube-grid > div');
+  if (allChips.length === 1) {
+    const c = allChips[0];
+    if (_connectingPortIsDual) selectConnectTubeDual1(parseInt(c.dataset.fiber), parseInt(c.dataset.tube), parseInt(c.dataset.count));
+    else selectConnectTube(parseInt(c.dataset.fiber), parseInt(c.dataset.tube), parseInt(c.dataset.count));
+  }
+
+  // Dual LC: Fiber 2 tube grid
+  if (_connectingPortIsDual) {
+    document.getElementById('ctube-grid-2').innerHTML = buildTubeChips(panel, 'selectConnectTubeDual2');
+    document.getElementById('ctube-section-2').style.display = '';
+    document.getElementById('cdual-fiber2').style.display = '';
+    document.getElementById('cstrand-section-2').style.display = 'none';
+    const allChips2 = document.querySelectorAll('#ctube-grid-2 > div');
+    if (allChips2.length === 1) {
+      const c = allChips2[0];
+      selectConnectTubeDual2(parseInt(c.dataset.fiber), parseInt(c.dataset.tube), parseInt(c.dataset.count));
+    }
+  } else {
+    document.getElementById('cdual-fiber2').style.display = 'none';
+  }
+}
+
+function selectConnectTube(panelFiberId, tubeIndex, fiberCount) {
+  _connectSelection = null;
+  document.querySelectorAll('#ctube-grid > div').forEach(el => {
+    el.style.borderColor = (parseInt(el.dataset.fiber) === panelFiberId && parseInt(el.dataset.tube) === tubeIndex)
+      ? '#1565c0' : 'transparent';
+  });
+  document.getElementById('cstrand-grid').innerHTML = buildStrandChips(panelFiberId, tubeIndex, fiberCount, 'selectConnectStrand');
+  document.getElementById('cstrand-section').style.display = '';
+}
+
+function selectConnectTubeDual1(panelFiberId, tubeIndex, fiberCount) {
+  _connectSelectionDual.f1 = null;
+  document.querySelectorAll('#ctube-grid > div').forEach(el => {
+    el.style.borderColor = (parseInt(el.dataset.fiber) === panelFiberId && parseInt(el.dataset.tube) === tubeIndex)
+      ? '#1565c0' : 'transparent';
+  });
+  document.getElementById('cstrand-grid').innerHTML = buildStrandChips(panelFiberId, tubeIndex, fiberCount, 'selectConnectStrandDual1');
+  document.getElementById('cstrand-section').style.display = '';
+}
+
+function selectConnectTubeDual2(panelFiberId, tubeIndex, fiberCount) {
+  _connectSelectionDual.f2 = null;
+  document.querySelectorAll('#ctube-grid-2 > div').forEach(el => {
+    el.style.borderColor = (parseInt(el.dataset.fiber) === panelFiberId && parseInt(el.dataset.tube) === tubeIndex)
+      ? '#1565c0' : 'transparent';
+  });
+  document.getElementById('cstrand-grid-2').innerHTML = buildStrandChips(panelFiberId, tubeIndex, fiberCount, 'selectConnectStrandDual2');
+  document.getElementById('cstrand-section-2').style.display = '';
+}
+
+function selectConnectStrand(panelFiberId, strand, el) {
+  _connectSelection = { panel_fiber_id: panelFiberId, strand };
+  document.querySelectorAll('#cstrand-grid > div').forEach(d => d.style.borderColor = 'transparent');
+  el.style.borderColor = '#1565c0';
+}
+
+function selectConnectStrandDual1(panelFiberId, strand, el) {
+  _connectSelectionDual.f1 = { panel_fiber_id: panelFiberId, strand };
+  document.querySelectorAll('#cstrand-grid > div').forEach(d => d.style.borderColor = 'transparent');
+  el.style.borderColor = '#1565c0';
+}
+
+function selectConnectStrandDual2(panelFiberId, strand, el) {
+  _connectSelectionDual.f2 = { panel_fiber_id: panelFiberId, strand };
+  document.querySelectorAll('#cstrand-grid-2 > div').forEach(d => d.style.borderColor = 'transparent');
+  el.style.borderColor = '#1565c0';
+}
+
+function updateConnectPorts() {
+  const connectedPortIds = new Set();
+  equipment.forEach(e => e.ports.forEach(p => { if (p.connections && p.connections.length) connectedPortIds.add(p.id); }));
+  const equipId = parseInt(document.getElementById('cequip-select').value);
+  const eq = equipment.find(e => e.id === equipId);
+  const portSel = document.getElementById('cport-select');
+  const available = (eq?.ports || []).filter(p => p.id !== _connectingPortId && !connectedPortIds.has(p.id));
+  portSel.innerHTML = available.length
+    ? available.map(p => `<option value="${p.id}">${esc(p.port_label)}${p.connector_type ? ' (' + esc(p.connector_type) + ')' : ''}</option>`).join('')
+    : '<option disabled>No available ports</option>';
+}
+
+function closeConnectModal() {
+  document.getElementById('connect-modal-bg').style.display = 'none';
+  _connectingPortId = null;
+  _connectSelection = null;
+}
+
+async function saveConnection() {
+  const isEquipFlow = document.getElementById('cflow-equip').style.display !== 'none';
+  try {
+    if (isEquipFlow) {
+      const portId = parseInt(document.getElementById('cport-select').value);
+      if (!portId) { alert('Select a port'); return; }
+      await apiFetch('POST', '/api/connections', { a_port_id: _connectingPortId, b_port_id: portId });
+    } else if (_connectingPortIsDual) {
+      const { f1, f2 } = _connectSelectionDual;
+      if (!f1 || !f2) { alert('Select a strand for both Fiber 1 and Fiber 2'); return; }
+      if (f1.panel_fiber_id === f2.panel_fiber_id && f1.strand === f2.strand) {
+        alert('Fiber 1 and Fiber 2 must be different strands'); return;
+      }
+      await apiFetch('POST', '/api/connections/duplex', { a_port_id: _connectingPortId, fiber1: f1, fiber2: f2 });
+    } else if (_connectingPortIsSharedFiber) {
+      if (!_connectSelection) { alert('Select a strand'); return; }
+      await apiFetch('POST', '/api/connections/shared-fiber', {
+        port_id: _connectingPortId,
+        panel_fiber_id: _connectSelection.panel_fiber_id,
+        strand: _connectSelection.strand,
+      });
+    } else {
+      if (!_connectSelection) { alert('Select a strand'); return; }
+      await apiFetch('POST', '/api/connections', {
+        a_port_id: _connectingPortId,
+        b_panel_fiber_id: _connectSelection.panel_fiber_id,
+        b_strand: _connectSelection.strand,
+      });
+    }
+    equipment = await apiFetch('GET', '/api/sites/' + siteId + '/equipment');
+    closeConnectModal();
+    renderEquipment();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+// ── Patch jumpers modal ────────────────────────────────────────────────────
+
+function openJumperModal() {
+  const panels = patchPanels.filter(p => p.fibers.length);
+  if (panels.length < 2 || (panels.length === 1 && panels[0].fibers.length < 2)) {
+    alert('You need at least two panel fibers to create a jumper.'); return;
+  }
+  _jumperSelections = { a: null, b: null };
+  ['a', 'b'].forEach(side => {
+    const sel = document.getElementById('jmp-panel-' + side);
+    sel.innerHTML = panels.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    document.getElementById('jmp-tube-section-' + side).style.display = 'none';
+    document.getElementById('jmp-strand-section-' + side).style.display = 'none';
+    updateJumperTubes(side);
+  });
+  document.getElementById('jumper-modal-bg').style.display = 'flex';
+}
+
+function closeJumperModal() {
+  document.getElementById('jumper-modal-bg').style.display = 'none';
+}
+
+function updateJumperTubes(side) {
+  _jumperSelections[side] = null;
+  document.getElementById('jmp-strand-section-' + side).style.display = 'none';
+  const panelId = parseInt(document.getElementById('jmp-panel-' + side).value);
+  const panel = patchPanels.find(p => p.id === panelId);
+  if (!panel) return;
+  let chips = '';
+  panel.fibers.forEach(fiber => {
+    const tubeCount = Math.ceil(fiber.fiber_count / 12);
+    for (let t = 0; t < tubeCount; t++) {
+      const fc = FIBER_COLORS[t % 12];
+      const start = t * 12 + 1;
+      const end = Math.min((t + 1) * 12, fiber.fiber_count);
+      const border = fc.border ? 'border:1px solid #bbb;' : '';
+      const fiberLabel = panel.fibers.length > 1
+        ? `<div style="font-size:9px;color:#777;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70px;">${esc(fiber.route_name)}</div>` : '';
+      chips += `<div onclick="selectJumperTube('${side}',${fiber.id},${t},${fiber.fiber_count})"
+        data-fiber="${fiber.id}" data-tube="${t}" data-count="${fiber.fiber_count}"
+        style="cursor:pointer;border-radius:6px;border:2px solid transparent;padding:5px 7px;
+          background:${fc.hex}22;text-align:center;min-width:58px;"
+        title="Fibers ${start}–${end}">
+        <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+          <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${fc.hex};${border}flex-shrink:0;"></span>
+          <span style="font-size:11px;font-weight:600;color:#333;">Tube ${t+1}</span>
+        </div>
+        <div style="font-size:10px;color:#777;">${start}–${end}</div>
+        ${fiberLabel}
+      </div>`;
+    }
+  });
+  document.getElementById('jmp-tube-grid-' + side).innerHTML = chips;
+  document.getElementById('jmp-tube-section-' + side).style.display = '';
+  const tubeChips = document.querySelectorAll('#jmp-tube-grid-' + side + ' > div');
+  if (tubeChips.length === 1) {
+    const c = tubeChips[0];
+    selectJumperTube(side, parseInt(c.dataset.fiber), parseInt(c.dataset.tube), parseInt(c.dataset.count));
+  }
+}
+
+function selectJumperTube(side, panelFiberId, tubeIndex, fiberCount) {
+  _jumperSelections[side] = null;
+  document.querySelectorAll('#jmp-tube-grid-' + side + ' > div').forEach(el => {
+    el.style.borderColor = (parseInt(el.dataset.fiber) === panelFiberId && parseInt(el.dataset.tube) === tubeIndex)
+      ? '#1565c0' : 'transparent';
+  });
+  const start = tubeIndex * 12 + 1;
+  const end = Math.min((tubeIndex + 1) * 12, fiberCount);
+  let chips = '';
+  for (let s = start; s <= end; s++) {
+    const fc = FIBER_COLORS[(s - 1) % 12];
+    const border = fc.border ? 'border:1px solid #bbb;' : '';
+    chips += `<div onclick="selectJumperStrand('${side}',${panelFiberId},${s},this)"
+      style="cursor:pointer;border-radius:6px;border:2px solid transparent;padding:4px 6px;
+        background:${fc.hex}22;text-align:center;min-width:48px;">
+      <div style="display:flex;align-items:center;gap:3px;justify-content:center;">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${fc.hex};${border}flex-shrink:0;"></span>
+        <span style="font-size:11px;font-weight:600;color:#333;">${s}</span>
+      </div>
+      <div style="font-size:9px;color:#777;">${fc.name}</div>
+    </div>`;
+  }
+  document.getElementById('jmp-strand-grid-' + side).innerHTML = chips;
+  document.getElementById('jmp-strand-section-' + side).style.display = '';
+}
+
+function selectJumperStrand(side, panelFiberId, strand, el) {
+  _jumperSelections[side] = { panel_fiber_id: panelFiberId, strand };
+  document.querySelectorAll('#jmp-strand-grid-' + side + ' > div').forEach(d => d.style.borderColor = 'transparent');
+  el.style.borderColor = '#1565c0';
+}
+
+async function saveJumper() {
+  const a = _jumperSelections.a;
+  const b = _jumperSelections.b;
+  if (!a || !b) { alert('Select a strand on both sides'); return; }
+  if (a.panel_fiber_id === b.panel_fiber_id && a.strand === b.strand) {
+    alert('Cannot connect a strand to itself.'); return;
+  }
+  try {
+    await apiFetch('POST', '/api/connections',
+      { a_panel_fiber_id: a.panel_fiber_id, a_strand: a.strand,
+        b_panel_fiber_id: b.panel_fiber_id, b_strand: b.strand });
+    jumpers = await apiFetch('GET', '/api/sites/' + siteId + '/jumpers');
+    closeJumperModal();
+    renderPatchPanels();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function disconnectJumper(connectionId) {
+  try {
+    await apiFetch('DELETE', '/api/connections/' + connectionId);
+    jumpers = jumpers.filter(j => j.id !== connectionId);
+    renderPatchPanels();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+init();
+</script>
+</body>
+</html>
