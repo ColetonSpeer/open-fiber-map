@@ -33,7 +33,7 @@ The installer handles all other dependencies (Node.js 20, PostgreSQL 16, PostGIS
 ## Quick Install
 
 ```bash
-git clone https://github.com/your-org/open-fiber-map.git
+git clone https://github.com/ColetonSpeer/open-fiber-map.git
 cd open-fiber-map
 sudo bash install.sh
 ```
