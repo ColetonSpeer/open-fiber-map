@@ -1252,6 +1252,147 @@ app.post('/api/connections/shared-fiber', requireAuth, async (req, res) => {
   } finally { client.release(); }
 });
 
+// ── Fiber path trace ────────────────────────────────────────────────────────
+// Walks the connectivity graph: equipment ports ↔ panel strands (connections),
+// route/cable fibers ↔ route/cable fibers (splices). Fiber numbers can change
+// at every splice; node identity handles that.
+//
+// Node keys:
+//   port:<portId>            equipment port
+//   rf:<routeId>:<fiber>     fiber N of a route (shared by all cables on it)
+//   cf:<cableId>:<fiber>     fiber N of a link cable (no route)
+
+app.get('/api/trace', requireAuth, async (req, res) => {
+  try {
+    const [cablesR, splicesR, connsR, portsR, pfR, routesR] = await Promise.all([
+      pool.query('SELECT id, route_id, name FROM cables'),
+      pool.query(
+        `SELECT s.id, s.closure_id, cl.name AS closure_name, s.splice_type,
+                s.from_cable_id, s.from_fiber, s.to_cable_id, s.to_fiber
+         FROM splices s LEFT JOIN closures cl ON cl.id = s.closure_id`),
+      pool.query('SELECT * FROM connections'),
+      pool.query(
+        `SELECT p.id, p.port_label, e.id AS equipment_id, e.name AS eq_name,
+                e.site_id, st.name AS site_name
+         FROM equipment_ports p
+         JOIN equipment e ON e.id = p.equipment_id
+         LEFT JOIN sites st ON st.id = e.site_id`),
+      pool.query(
+        `SELECT pf.id, pf.route_id, pp.name AS panel_name, pp.site_id,
+                st.name AS site_name, r.name AS route_name
+         FROM panel_fibers pf
+         JOIN patch_panels pp ON pp.id = pf.panel_id
+         LEFT JOIN sites st ON st.id = pp.site_id
+         JOIN routes r ON r.id = pf.route_id`),
+      pool.query('SELECT id, name FROM routes'),
+    ]);
+
+    const cables = new Map(cablesR.rows.map(c => [c.id, c]));
+    const ports  = new Map(portsR.rows.map(p => [p.id, p]));
+    const pfs    = new Map(pfR.rows.map(f => [f.id, f]));
+    const routes = new Map(routesR.rows.map(r => [r.id, r]));
+
+    const cableNode = (cableId, fiber) => {
+      const c = cables.get(cableId);
+      if (!c) return null;
+      return c.route_id ? `rf:${c.route_id}:${fiber}` : `cf:${cableId}:${fiber}`;
+    };
+
+    const nodeInfo = (key) => {
+      const [type, id, fiber] = key.split(':');
+      if (type === 'port') {
+        const p = ports.get(+id);
+        return { key, type: 'port', label: p ? `${p.eq_name} › ${p.port_label}` : `Port #${id}`,
+                 detail: p?.site_name ? `at ${p.site_name}` : '', site_id: p?.site_id ?? null };
+      }
+      if (type === 'rf') {
+        const r = routes.get(+id);
+        return { key, type: 'route_fiber', label: `${r ? r.name : 'Route #' + id} — fiber ${fiber}`,
+                 detail: '', route_id: +id };
+      }
+      const c = cables.get(+id);
+      return { key, type: 'cable_fiber', label: `${c ? c.name : 'Cable #' + id} (link cable) — fiber ${fiber}`,
+               detail: '' };
+    };
+
+    // Build adjacency
+    const adj = new Map();
+    const addEdge = (a, b, via) => {
+      if (!a || !b || a === b) return;
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.has(b)) adj.set(b, []);
+      adj.get(a).push({ to: b, via });
+      adj.get(b).push({ to: a, via });
+    };
+
+    for (const s of splicesR.rows) {
+      const a = cableNode(s.from_cable_id, s.from_fiber);
+      const b = cableNode(s.to_cable_id, s.to_fiber);
+      addEdge(a, b, {
+        kind: 'splice', splice_type: s.splice_type, closure_id: s.closure_id,
+        label: `Splice (${s.splice_type})${s.closure_name ? ' @ ' + s.closure_name : ''}: f${s.from_fiber} → f${s.to_fiber}`,
+      });
+    }
+
+    const connSideNode = (portId, pfId, strand) => {
+      if (portId) return `port:${portId}`;
+      const pf = pfs.get(pfId);
+      return pf ? `rf:${pf.route_id}:${strand}` : null;
+    };
+    for (const c of connsR.rows) {
+      const a = connSideNode(c.a_port_id, c.a_panel_fiber_id, c.a_strand);
+      const b = connSideNode(c.b_port_id, c.b_panel_fiber_id, c.b_strand);
+      const pf = pfs.get(c.a_panel_fiber_id || c.b_panel_fiber_id);
+      const isJumper = !c.a_port_id && !c.b_port_id;
+      addEdge(a, b, {
+        kind: isJumper ? 'jumper' : 'patch',
+        label: pf
+          ? `${isJumper ? 'Jumper' : 'Patched'} at ${pf.panel_name}${pf.site_name ? ' (' + pf.site_name + ')' : ''}`
+          : 'Direct connection',
+      });
+    }
+
+    // Resolve start node
+    let startKey = null;
+    if (req.query.port) startKey = `port:${+req.query.port}`;
+    else if (req.query.panel_fiber && req.query.strand) {
+      const pf = pfs.get(+req.query.panel_fiber);
+      if (pf) startKey = `rf:${pf.route_id}:${+req.query.strand}`;
+    } else if (req.query.route && req.query.fiber) {
+      startKey = `rf:${+req.query.route}:${+req.query.fiber}`;
+    }
+    if (!startKey) return res.status(400).json({ error: 'Specify port, panel_fiber+strand, or route+fiber' });
+
+    // DFS walk emitting hops in path order; depth increases per hop so the
+    // common linear path renders as a chain and branches indent further
+    const visited = new Set([startKey]);
+    const steps = [];
+    const routeIds = new Set();
+    let branched = false;
+    const startInfo = nodeInfo(startKey);
+    if (startInfo.route_id) routeIds.add(startInfo.route_id);
+
+    const walk = (key, depth) => {
+      const edges = (adj.get(key) || []).filter(e => !visited.has(e.to));
+      if (edges.length > 1) branched = true;
+      for (const e of edges) {
+        if (visited.has(e.to)) continue; // re-check: earlier sibling may have claimed it
+        visited.add(e.to);
+        const info = nodeInfo(e.to);
+        if (info.route_id) routeIds.add(info.route_id);
+        steps.push({ depth, via: e.via, node: info });
+        walk(e.to, depth + 1);
+      }
+    };
+    walk(startKey, 1);
+
+    res.json({ start: startInfo, steps, route_ids: [...routeIds], branched });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── Custom field values ────────────────────────────────────────────────────
 
 app.get('/api/field-values/:entityType/:entityId', requireAuth, async (req, res) => {

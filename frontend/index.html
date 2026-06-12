@@ -592,7 +592,8 @@ async function loadLayerPrefs() {
     if (prefs.mapZoom !== undefined) layerPrefs.mapZoom = prefs.mapZoom;
     if (prefs.darkMode !== undefined) layerPrefs.darkMode = prefs.darkMode;
   } catch (_) {}
-  map.setView([layerPrefs.mapLat, layerPrefs.mapLng], layerPrefs.mapZoom);
+  // Skip position restore when arriving via a trace link — zoomToTrace owns the view
+  if (!_traceRouteIds.size) map.setView([layerPrefs.mapLat, layerPrefs.mapLng], layerPrefs.mapZoom);
   applyLayerPrefs();
   applyDarkMode(layerPrefs.darkMode);
 }
@@ -1739,6 +1740,7 @@ async function loadData() {
       if (defLayer) state.activeLayerId = defLayer.id;
     }
     renderMap();
+    zoomToTrace();
     updateActiveLayerLabel();
     updateToolbarRestrictions();
     if (_mapLayersPanelOpen) renderLayersPanel();
@@ -1824,6 +1826,23 @@ function isItemVisible(item) {
   return true;
 }
 
+// Fiber trace highlight: /?trace=1,2,3 (route ids from a trace result)
+const _traceRouteIds = new Set(
+  (new URLSearchParams(location.search).get('trace') || '')
+    .split(',').map(Number).filter(Boolean)
+);
+let _traceHalos = [];
+let _traceZoomed = false;
+
+function zoomToTrace() {
+  if (_traceZoomed || !_traceRouteIds.size) return;
+  const traced = state.routes.filter(r => _traceRouteIds.has(r.id));
+  if (!traced.length) return;
+  const allCoords = traced.flatMap(r => r.geom.coordinates.map(c => [c[1], c[0]]));
+  map.fitBounds(L.latLngBounds(allCoords), { padding: [60, 60] });
+  _traceZoomed = true;
+}
+
 function renderMap() {
   if (state.mode === 'edit' && state.editingRouteId !== null) return; // don't reset while vertex-editing
   // Clear existing markers
@@ -1831,6 +1850,8 @@ function renderMap() {
   Object.values(state.poleMarkers).forEach(m => map.removeLayer(m));
   Object.values(state.siteMarkers).forEach(m => map.removeLayer(m));
   Object.values(state.routeLayers).forEach(m => map.removeLayer(m));
+  _traceHalos.forEach(m => map.removeLayer(m));
+  _traceHalos = [];
   state.closureMarkers = {};
   state.poleMarkers = {};
   state.siteMarkers = {};
@@ -2003,6 +2024,9 @@ function renderMap() {
   state.routes.forEach(r => {
     if (!isItemVisible(r)) return;
     const coords = r.geom.coordinates.map(c => [c[1], c[0]]);
+    if (_traceRouteIds.has(r.id)) {
+      _traceHalos.push(L.polyline(coords, { color: '#ffeb3b', weight: 12, opacity: 0.9 }).addTo(map));
+    }
     const line = L.polyline(coords, { color: r.color || '#FF8800', weight: 4, opacity: 0.85 }).addTo(map);
     const fcLabel = r.fiber_count ? ` (${r.fiber_count}F)` : '';
     line.bindTooltip(r.name + fcLabel, { permanent: false, direction: 'top', sticky: true });

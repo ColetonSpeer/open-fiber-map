@@ -157,6 +157,17 @@
 </div>
 
 <!-- Edit modal -->
+<div id="trace-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeTraceModal()">
+  <div style="background:white;border-radius:10px;padding:20px;width:560px;max-width:92vw;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h3 style="margin:0;font-size:16px;">Fiber Trace</h3>
+      <button onclick="closeTraceModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888;">✕</button>
+    </div>
+    <div id="trace-body" style="font-size:13px;"></div>
+    <div id="trace-footer" style="margin-top:14px;"></div>
+  </div>
+</div>
+
 <div id="edit-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:8px;padding:24px;width:400px;max-width:95vw;max-height:90vh;overflow-y:auto;">
     <h2 style="margin-bottom:16px;font-size:16px;">Edit Site</h2>
@@ -898,6 +909,47 @@ async function deleteSite() {
   if (r.ok) window.location.href = '/';
 }
 
+// ── Fiber trace ────────────────────────────────────────────────────────────
+
+const TRACE_ICONS = { splice: '⚡', patch: '🔌', jumper: '🔌' };
+const TRACE_NODE_ICONS = { port: '🖥️', route_fiber: '〰️', cable_fiber: '〰️' };
+
+async function openTraceModal(portId) {
+  document.getElementById('trace-modal-bg').style.display = 'flex';
+  const body = document.getElementById('trace-body');
+  const footer = document.getElementById('trace-footer');
+  body.innerHTML = '<div style="color:#888;">Tracing…</div>';
+  footer.innerHTML = '';
+  const r = await fetch('/api/trace?port=' + portId, { credentials: 'include' });
+  if (!r.ok) { body.innerHTML = '<div style="color:#c62828;">Trace failed.</div>'; return; }
+  const t = await r.json();
+
+  const nodeLine = (n) => `<span style="margin-right:5px;">${TRACE_NODE_ICONS[n.type] || '•'}</span>
+    <strong>${esc(n.label)}</strong>${n.detail ? ` <span style="color:#888;">${esc(n.detail)}</span>` : ''}`;
+
+  let html = `<div style="padding:6px 8px;background:#e3f2fd;border-radius:6px;margin-bottom:4px;">${nodeLine(t.start)}</div>`;
+  if (!t.steps.length) {
+    html += '<div style="color:#888;padding:6px 8px;">No connectivity beyond this port.</div>';
+  }
+  for (const s of t.steps) {
+    const indent = 10 + (s.depth - 1) * 18;
+    html += `<div style="padding:2px 0 2px ${indent}px;color:#777;font-size:12px;">
+        ${TRACE_ICONS[s.via.kind] || '·'} ${esc(s.via.label)}</div>
+      <div style="padding:5px 8px;margin-left:${indent}px;background:#f5f7fa;border-radius:6px;margin-bottom:3px;">${nodeLine(s.node)}</div>`;
+  }
+  if (t.branched) {
+    html += `<div style="color:#e65100;font-size:12px;margin-top:8px;">⚠️ This path branches (duplex pair, shared fiber, or data anomaly) — indentation shows each branch.</div>`;
+  }
+  body.innerHTML = html;
+  if (t.route_ids.length) {
+    footer.innerHTML = `<a href="/?trace=${t.route_ids.join(',')}" target="_blank" class="btn btn-secondary" style="font-size:12px;text-decoration:none;">View path on map →</a>`;
+  }
+}
+
+function closeTraceModal() {
+  document.getElementById('trace-modal-bg').style.display = 'none';
+}
+
 // ── Equipment ──────────────────────────────────────────────────────────────
 
 function buildPortRow(p, eq) {
@@ -917,6 +969,8 @@ function buildPortRow(p, eq) {
       : `${esc(c.other_panel_name)} › ${esc(c.other_route_name)} › Strand ${c.other_strand}`;
     connectedCell = `<span style="font-size:12px;">${dest}</span>`;
     actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="openTraceModal(${p.id})">Trace</button>
+      <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
       onclick="disconnectPort(${c.id}, null, ${eq.id}, ${p.id})">Disconnect</button>`;
   } else {
     const pairId = conns[0].pair_id;
@@ -928,6 +982,8 @@ function buildPortRow(p, eq) {
     }).join('');
     connectedCell = lines;
     actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="openTraceModal(${p.id})">Trace</button>
+      <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
       onclick="disconnectPort(null, ${pairId}, ${eq.id}, ${p.id})">Disconnect</button>`;
   }
   return `<tr>
@@ -967,6 +1023,8 @@ function buildSharedFiberPortRow(ports, eq) {
     connectedCell = `<span style="font-size:12px;">${dest}</span>`;
     const pairId = c.pair_id || c.id;
     actionBtn = `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="openTraceModal(${first.id})">Trace</button>
+      <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
       onclick="disconnectPort(null, ${pairId}, ${eq.id}, ${first.id})">Disconnect</button>`;
   }
   return `<tr>
