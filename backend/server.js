@@ -2118,7 +2118,7 @@ app.post('/api/sites/:id/patch-panels', requireAuth, async (req, res) => {
     const pRes = await pool.query(
       `INSERT INTO patch_panels (site_id, name, default_connector) VALUES ($1,$2,$3)
        RETURNING id, name, default_connector`,
-      [siteId, name, default_connector || 'LC/UPC (Single)']
+      [siteId, name, default_connector || 'LC/UPC Simplex']
     );
     const panel = pRes.rows[0];
     if (route_id) {

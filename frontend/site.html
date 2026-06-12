@@ -395,8 +395,8 @@
 const TYPE_LABELS = { office: 'Office', pole_cabinet: 'Pole Cabinet', ground_cabinet: 'Ground Cabinet', hut: 'Hut' };
 let CONNECTOR_TYPES = [];
 const CONNECTOR_COLORS = {
-  'LC/UPC (Single)': '#1565c0',
-  'LC/UPC (Dual)':   '#1565c0',
+  'LC/UPC Simplex': '#1565c0',
+  'LC/UPC Duplex':  '#1565c0',
   'LC/APC':         '#2e7d32',
   'SC/UPC':    '#1565c0',
   'SC/APC':    '#2e7d32',
@@ -1827,7 +1827,7 @@ function openConnectModal(portId) {
       break;
     }
   }
-  _connectingPortIsDual = portConnectorType === 'LC/UPC (Dual)';
+  _connectingPortIsDual = portConnectorType === 'LC/UPC Duplex';
   const isCopperPort = portType === 'copper' || portConnectorType === 'RJ45';
   document.getElementById('connect-modal-title').textContent = 'Connect: ' + equipName + ' / ' + portLabel;
 
