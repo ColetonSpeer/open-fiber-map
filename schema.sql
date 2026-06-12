@@ -214,6 +214,17 @@ CREATE TABLE public.connector_types (
     sort_order smallint DEFAULT 0 NOT NULL
 );
 
+INSERT INTO public.connector_types (name, enabled, sort_order) VALUES
+  ('LC/UPC', true, 1),
+  ('LC/APC', true, 2),
+  ('SC/UPC', true, 3),
+  ('SC/APC', true, 4),
+  ('MPO-12', true, 5),
+  ('FC/UPC', true, 6),
+  ('FC/APC', true, 7),
+  ('ST/UPC', true, 8)
+ON CONFLICT (name) DO NOTHING;
+
 
 --
 -- Name: custom_field_defs; Type: TABLE; Schema: public; Owner: -
