@@ -1382,6 +1382,14 @@ function monitorControl(eq) {
   </div>`;
 }
 
+function detectVendorFromName(name) {
+  const n = (name || '').toLowerCase();
+  if (/arista|dcs-/.test(n))                    return 'arista';
+  if (/juniper|qfx|srx|mx\d|ex\d|ptx|acx/.test(n)) return 'juniper';
+  if (/calix|e7-|e9-|axos|smx|gigapoint/.test(n))   return 'calix';
+  return null;
+}
+
 function openDeviceModal(equipId) {
   const dev = monitoredDevices.find(d => d.equipment_id === equipId);
   const eq = equipment.find(e => e.id === equipId);
@@ -1390,7 +1398,7 @@ function openDeviceModal(equipId) {
   document.getElementById('device-modal-title').textContent =
     (dev ? 'Edit' : 'Add') + ' monitor — ' + (eq ? eq.name : '');
   document.getElementById('dm-name').value = dev?.name || (eq ? eq.name + ' monitor' : '');
-  document.getElementById('dm-vendor').value = dev?.vendor || 'simulator';
+  document.getElementById('dm-vendor').value = dev?.vendor || detectVendorFromName(eq?.name) || 'simulator';
   document.getElementById('dm-host').value = dev?.host || '';
   document.getElementById('dm-port').value = dev?.port || '';
   document.getElementById('dm-user').value = dev?.username || '';
