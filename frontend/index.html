@@ -464,7 +464,7 @@ async function checkSession() {
 
 // ============ MAP ============
 function initMap() {
-  map = L.map('map', { doubleClickZoom: false, maxZoom: 22 }).setView([40.322, -80.318], 14);
+  map = L.map('map', { doubleClickZoom: false, maxZoom: 22 }).setView([39.5, -98.35], 4);
   map.createPane('roadsPane').style.zIndex = 450;
   map.createPane('labelsPane').style.zIndex = 460;
   streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -530,7 +530,7 @@ let _searchAbort = null;
 let _geoContext  = null;   // { vb: 'west,north,east,south', cc: 'us' } — current admin bounds
 let _geoCtxTimer = null;
 let _pendingImport = null;  // holds { parsed, groupName } while import modal is open
-let layerPrefs = { basemap: 'street', showLabels: true, showRoads: true, showHouseNums: false, mapLat: 40.322, mapLng: -80.318, mapZoom: 14, darkMode: false };
+let layerPrefs = { basemap: 'street', showLabels: true, showRoads: true, showHouseNums: false, mapLat: 39.5, mapLng: -98.35, mapZoom: 4, darkMode: false };
 
 function applyLayerPrefs() {
   if (layerPrefs.basemap === 'sat') {
