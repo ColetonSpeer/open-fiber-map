@@ -215,14 +215,15 @@ CREATE TABLE public.connector_types (
 );
 
 INSERT INTO public.connector_types (name, enabled, sort_order) VALUES
-  ('LC/UPC', true, 1),
-  ('LC/APC', true, 2),
-  ('SC/UPC', true, 3),
-  ('SC/APC', true, 4),
-  ('MPO-12', true, 5),
-  ('FC/UPC', true, 6),
-  ('FC/APC', true, 7),
-  ('ST/UPC', true, 8)
+  ('LC/UPC Simplex', true, 1),
+  ('LC/UPC Duplex',  true, 2),
+  ('LC/APC',         true, 3),
+  ('SC/UPC',         true, 4),
+  ('SC/APC',         true, 5),
+  ('MPO-12',         true, 6),
+  ('FC/UPC',         true, 7),
+  ('FC/APC',         true, 8),
+  ('ST/UPC',         true, 9)
 ON CONFLICT (name) DO NOTHING;
 
 
