@@ -1594,6 +1594,35 @@ app.get('/api/trace', requireAuth, async (req, res) => {
 
 const http = require('http');
 const https = require('https');
+let snmp = null;
+try { snmp = require('net-snmp'); } catch (_) { /* optional — only Juniper needs it */ }
+
+// Juniper DOM MIB (mib-jnx-dom) — jnxDomCurrentTable, indexed by ifIndex.
+// These column OIDs and the dBm scaling are the common Junos values; if a
+// platform reports power differently (e.g. µW), adjust POWER_SCALE / OIDs.
+const JNX = {
+  RX:   '1.3.6.1.4.1.2636.3.60.1.1.1.1.5',  // jnxDomCurrentRxLaserPower
+  TX:   '1.3.6.1.4.1.2636.3.60.1.1.1.1.7',  // jnxDomCurrentTxLaserOutputPower
+  TEMP: '1.3.6.1.4.1.2636.3.60.1.1.1.1.8',  // jnxDomCurrentModuleTemperature (°C)
+  POWER_SCALE: 0.01,                         // raw integer → dBm (units of 1/100 dBm)
+};
+const OID_IFDESCR = '1.3.6.1.2.1.2.2.1.2';   // IF-MIB::ifDescr, maps ifIndex → name
+
+// Walk an SNMP subtree → Map of { indexSuffix: value } (suffix = OID after base).
+function snmpSubtree(session, baseOid) {
+  return new Promise((resolve, reject) => {
+    const out = new Map();
+    session.subtree(baseOid, 20,
+      (varbinds) => {
+        for (const vb of varbinds) {
+          if (snmp.isVarbindError(vb)) continue;
+          out.set(vb.oid.slice(baseOid.length + 1), vb.value);
+        }
+      },
+      (error) => error ? reject(error) : resolve(out)
+    );
+  });
+}
 
 // Minimal JSON HTTP client. Allows self-signed TLS (internal mgmt interfaces).
 function httpRequest(urlStr, { method = 'GET', headers = {}, body = null, timeoutMs = 8000 } = {}) {
@@ -1681,7 +1710,7 @@ const DRIVERS = {
   // Arista — eAPI (JSON-RPC over HTTP/S). "show interfaces transceiver" returns
   // rxPower/txPower in dBm per interface.
   async arista(device, ports) {
-    const scheme = device.port === 80 ? 'http' : 'https';
+    const scheme = (device.port === 80 || device.port === 8080) ? 'http' : 'https';
     const origin = `${scheme}://${device.host}:${device.port || 443}/command-api`;
     const authHeader = 'Basic ' + Buffer.from(`${device.username}:${device.secret}`).toString('base64');
     const rpc = {
@@ -1689,20 +1718,52 @@ const DRIVERS = {
       params: { version: 1, cmds: ['show interfaces transceiver'], format: 'json' },
     };
     const r = await httpRequest(origin, { method: 'POST', headers: { Authorization: authHeader }, body: rpc });
+    if (r.status === 401) throw new Error('Arista eAPI: authentication failed');
     if (r.status >= 400 || !r.json) throw new Error(`Arista eAPI failed (HTTP ${r.status})`);
-    if (r.json.error) throw new Error('Arista eAPI: ' + (r.json.error.message || 'error'));
+    if (r.json.error) throw new Error('Arista eAPI: ' + (r.json.error.message || JSON.stringify(r.json.error)));
     const ifaces = r.json.result?.[0]?.interfaces || {};
+    // DOM fields are top-level on most EOS versions but nested under .details
+    // or .parameters on others — read leniently.
+    const pick = (d, k) => {
+      const v = d[k] ?? d.details?.[k] ?? d.parameters?.[k];
+      return (v && typeof v === 'object') ? (v.value ?? null) : v;
+    };
     return Object.entries(ifaces).map(([name, d]) => ({
       interface_name: name,
-      rx_dbm: round2(d.rxPower), tx_dbm: round2(d.txPower), temperature_c: round2(d.temperature),
-    }));
+      rx_dbm: round2(pick(d, 'rxPower')),
+      tx_dbm: round2(pick(d, 'txPower')),
+      temperature_c: round2(pick(d, 'temperature')),
+    })).filter(r => r.rx_dbm != null || r.tx_dbm != null);
   },
 
-  // Juniper — optical DDM lives in the jnxDomCurrent MIB (SNMP) or
-  // "show interfaces diagnostics optics" (NETCONF). Both need a transport
-  // library not bundled here; wire one in to enable.
-  async juniper() {
-    throw new Error('Juniper polling needs SNMP (jnxDomCurrent MIB) or NETCONF support — not yet bundled. Use the simulator vendor to test, or add net-snmp.');
+  // Juniper — optical DDM via SNMP (jnxDomCurrent MIB). Walks rx/tx power and
+  // temperature columns, joining ifDescr for interface names.
+  async juniper(device, ports) {
+    if (!snmp) throw new Error('Juniper polling requires the net-snmp package (npm install net-snmp).');
+    const session = snmp.createSession(device.host, device.secret || 'public', {
+      port: device.port || 161, version: snmp.Version2c, timeout: 5000, retries: 1,
+    });
+    try {
+      const [rx, tx, temp, names] = await Promise.all([
+        snmpSubtree(session, JNX.RX),
+        snmpSubtree(session, JNX.TX),
+        snmpSubtree(session, JNX.TEMP),
+        snmpSubtree(session, OID_IFDESCR),
+      ]);
+      const readings = [];
+      for (const [idx, rxv] of rx) {
+        readings.push({
+          interface_name: names.has(idx) ? String(names.get(idx)) : ('ifIndex ' + idx),
+          rx_dbm: round2(Number(rxv) * JNX.POWER_SCALE),
+          tx_dbm: tx.has(idx) ? round2(Number(tx.get(idx)) * JNX.POWER_SCALE) : null,
+          temperature_c: temp.has(idx) ? round2(Number(temp.get(idx))) : null,
+        });
+      }
+      if (!readings.length) throw new Error('No DOM entries returned — check SNMP community and that the device supports jnxDomCurrent.');
+      return readings;
+    } finally {
+      session.close();
+    }
   },
 };
 
