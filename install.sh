@@ -150,6 +150,22 @@ if [[ $DB_EXISTS -eq 0 ]]; then
     sudo -u postgres psql "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO \"$DB_USER\";" >/dev/null
     sudo -u postgres psql "$DB_NAME" -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \"$DB_USER\";" >/dev/null
     sudo -u postgres psql "$DB_NAME" -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \"$DB_USER\";" >/dev/null
+    # Schema is imported as the postgres superuser, so it owns the tables. The
+    # app applies idempotent migrations at boot (ALTER/CREATE), which require
+    # ownership — reassign all public objects (except PostGIS system tables) to
+    # the app user.
+    sudo -u postgres psql "$DB_NAME" >/dev/null <<SQL
+DO \$\$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'spatial_ref_sys' LOOP
+    BEGIN EXECUTE format('ALTER TABLE public.%I OWNER TO "$DB_USER"', r.tablename); EXCEPTION WHEN OTHERS THEN NULL; END;
+  END LOOP;
+  FOR r IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema='public' LOOP
+    BEGIN EXECUTE format('ALTER SEQUENCE public.%I OWNER TO "$DB_USER"', r.sequence_name); EXCEPTION WHEN OTHERS THEN NULL; END;
+  END LOOP;
+END \$\$;
+SQL
     info "Schema imported successfully."
 fi
 

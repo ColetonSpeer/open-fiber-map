@@ -421,6 +421,132 @@ app.delete('/api/splices/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ============ SPLITTERS & TAPS ============
+// A splitter has one input fiber and N output legs. Balanced splitters divide
+// power equally (1:N); taps (FBT) divide it unevenly by percentage per leg.
+// Fiber numbers here follow the closure UI's 0-based convention, like splices.
+
+// Builds the output-leg rows for a splitter from a high-level spec.
+function buildSplitterLegs({ splitter_type, ratio, excess_loss_db, outputs }) {
+  if (splitter_type === 'tap') {
+    return (outputs || []).map((o, i) => ({
+      leg_index: i + 1,
+      label: o.label || (i === 0 ? 'tap' : 'pass'),
+      output_cable_id: o.output_cable_id ?? null,
+      output_fiber: o.output_fiber ?? null,
+      tap_percent: o.tap_percent ?? null,
+      loss_db: o.loss_db != null ? +o.loss_db
+        : (o.tap_percent != null ? tapLegLoss(o.tap_percent, excess_loss_db) : null),
+    }));
+  }
+  // balanced: N legs derived from ratio like "1:8"
+  const n = parseInt(String(ratio).split(':')[1], 10) || (outputs ? outputs.length : 2);
+  const legLoss = balancedLegLoss(n, excess_loss_db);
+  return Array.from({ length: n }, (_, i) => {
+    const o = (outputs && outputs[i]) || {};
+    return {
+      leg_index: i + 1,
+      label: o.label || String(i + 1),
+      output_cable_id: o.output_cable_id ?? null,
+      output_fiber: o.output_fiber ?? null,
+      tap_percent: null,
+      loss_db: o.loss_db != null ? +o.loss_db : legLoss,
+    };
+  });
+}
+
+async function loadSplitters(closureId) {
+  const sR = await pool.query('SELECT * FROM splitters WHERE closure_id=$1 ORDER BY id', [closureId]);
+  if (!sR.rows.length) return [];
+  const oR = await pool.query(
+    'SELECT * FROM splitter_outputs WHERE splitter_id = ANY($1) ORDER BY leg_index',
+    [sR.rows.map(s => s.id)]
+  );
+  const byId = new Map(sR.rows.map(s => [s.id, { ...s, outputs: [] }]));
+  oR.rows.forEach(o => byId.get(o.splitter_id)?.outputs.push(o));
+  return [...byId.values()];
+}
+
+app.get('/api/closures/:id/splitters', requireAuth, async (req, res) => {
+  try {
+    res.json(await loadSplitters(req.params.id));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/splitters', requireAuth, async (req, res) => {
+  const { closure_id, name, splitter_type, ratio, excess_loss_db,
+          input_cable_id, input_fiber, outputs } = req.body;
+  if (!closure_id || !name) return res.status(400).json({ error: 'closure_id and name required' });
+  const type = splitter_type === 'tap' ? 'tap' : 'balanced';
+  const legs = buildSplitterLegs({ splitter_type: type, ratio, excess_loss_db, outputs });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const sR = await client.query(
+      `INSERT INTO splitters (closure_id, name, ratio, splitter_type, excess_loss_db, input_cable_id, input_fiber)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [closure_id, name, ratio || (type === 'tap' ? 'tap' : '1:2'), type,
+       excess_loss_db || 0, input_cable_id || null, input_fiber ?? null]
+    );
+    const splitter = sR.rows[0];
+    for (const leg of legs) {
+      await client.query(
+        `INSERT INTO splitter_outputs (splitter_id, leg_index, label, output_cable_id, output_fiber, tap_percent, loss_db)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [splitter.id, leg.leg_index, leg.label, leg.output_cable_id, leg.output_fiber, leg.tap_percent, leg.loss_db]
+      );
+    }
+    await client.query('COMMIT');
+    const all = await loadSplitters(closure_id);
+    res.json(all.find(s => s.id === splitter.id));
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  } finally { client.release(); }
+});
+
+// Replace a splitter's outputs (used to assign fibers/loss after creation)
+app.put('/api/splitters/:id', requireAuth, async (req, res) => {
+  const { name, excess_loss_db, input_cable_id, input_fiber, outputs } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cur = await client.query('SELECT * FROM splitters WHERE id=$1', [req.params.id]);
+    if (!cur.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    const s = cur.rows[0];
+    await client.query(
+      `UPDATE splitters SET name=$2, excess_loss_db=$3, input_cable_id=$4, input_fiber=$5 WHERE id=$1`,
+      [s.id, name ?? s.name, excess_loss_db ?? s.excess_loss_db,
+       input_cable_id !== undefined ? input_cable_id : s.input_cable_id,
+       input_fiber !== undefined ? input_fiber : s.input_fiber]
+    );
+    if (Array.isArray(outputs)) {
+      for (const o of outputs) {
+        await client.query(
+          `UPDATE splitter_outputs SET output_cable_id=$2, output_fiber=$3, tap_percent=$4, loss_db=$5, label=COALESCE($6,label)
+           WHERE splitter_id=$1 AND leg_index=$7`,
+          [s.id, o.output_cable_id ?? null, o.output_fiber ?? null,
+           o.tap_percent ?? null, o.loss_db ?? null, o.label ?? null, o.leg_index]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    res.json((await loadSplitters(s.closure_id)).find(x => x.id === s.id));
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  } finally { client.release(); }
+});
+
+app.delete('/api/splitters/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM splitters WHERE id=$1', [req.params.id]); // cascades outputs
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ============ CUSTOM FIELDS ============
 
 app.get('/api/field-defs', requireAuth, async (req, res) => {
@@ -1253,18 +1379,29 @@ app.post('/api/connections/shared-fiber', requireAuth, async (req, res) => {
 });
 
 // ── Fiber path trace ────────────────────────────────────────────────────────
-// Walks the connectivity graph: equipment ports ↔ panel strands (connections),
-// route/cable fibers ↔ route/cable fibers (splices). Fiber numbers can change
-// at every splice; node identity handles that.
+// Walks the connectivity graph and accumulates optical loss along the path:
+//   - connections: equipment ports ↔ panel strands (patch / jumper, ~0.5 dB)
+//   - splices: route/cable fiber ↔ route/cable fiber (~0.1 dB), fiber # can change
+//   - splitters: one input fiber fans out to N output legs, each with its own
+//     insertion loss. A splitter is a node so light entering an output leg only
+//     continues to the input (upstream) — it does not couple to sibling legs.
+//
+// Fiber numbers are canonicalized to 1-based: panel strands are already 1-based;
+// splice and splitter fibers are stored 0-based (closure UI convention) so we
+// add 1 when building node keys.
 //
 // Node keys:
 //   port:<portId>            equipment port
 //   rf:<routeId>:<fiber>     fiber N of a route (shared by all cables on it)
 //   cf:<cableId>:<fiber>     fiber N of a link cable (no route)
+//   spl:<splitterId>         a splitter body
+
+const LOSS_SPLICE = 0.1;   // dB, typical fusion splice
+const LOSS_PATCH  = 0.5;   // dB, typical mated connector pair
 
 app.get('/api/trace', requireAuth, async (req, res) => {
   try {
-    const [cablesR, splicesR, connsR, portsR, pfR, routesR] = await Promise.all([
+    const [cablesR, splicesR, connsR, portsR, pfR, routesR, splittersR, soR] = await Promise.all([
       pool.query('SELECT id, route_id, name FROM cables'),
       pool.query(
         `SELECT s.id, s.closure_id, cl.name AS closure_name, s.splice_type,
@@ -1285,17 +1422,24 @@ app.get('/api/trace', requireAuth, async (req, res) => {
          LEFT JOIN sites st ON st.id = pp.site_id
          JOIN routes r ON r.id = pf.route_id`),
       pool.query('SELECT id, name FROM routes'),
+      pool.query(
+        `SELECT sp.id, sp.name, sp.ratio, sp.splitter_type, sp.input_cable_id, sp.input_fiber,
+                cl.name AS closure_name
+         FROM splitters sp LEFT JOIN closures cl ON cl.id = sp.closure_id`),
+      pool.query('SELECT * FROM splitter_outputs'),
     ]);
 
     const cables = new Map(cablesR.rows.map(c => [c.id, c]));
     const ports  = new Map(portsR.rows.map(p => [p.id, p]));
     const pfs    = new Map(pfR.rows.map(f => [f.id, f]));
     const routes = new Map(routesR.rows.map(r => [r.id, r]));
+    const splitters = new Map(splittersR.rows.map(s => [s.id, s]));
 
-    const cableNode = (cableId, fiber) => {
+    // 1-based fiber key for a cable's fiber (route fibers shared across cables)
+    const cableNode = (cableId, fiber1) => {
       const c = cables.get(cableId);
-      if (!c) return null;
-      return c.route_id ? `rf:${c.route_id}:${fiber}` : `cf:${cableId}:${fiber}`;
+      if (!c || fiber1 == null) return null;
+      return c.route_id ? `rf:${c.route_id}:${fiber1}` : `cf:${cableId}:${fiber1}`;
     };
 
     const nodeInfo = (key) => {
@@ -1310,12 +1454,19 @@ app.get('/api/trace', requireAuth, async (req, res) => {
         return { key, type: 'route_fiber', label: `${r ? r.name : 'Route #' + id} — fiber ${fiber}`,
                  detail: '', route_id: +id };
       }
+      if (type === 'spl') {
+        const s = splitters.get(+id);
+        const ratio = s ? (s.splitter_type === 'tap' ? 'tap' : s.ratio) : '';
+        return { key, type: 'splitter',
+                 label: `${s ? s.name : 'Splitter #' + id}${ratio ? ' (' + ratio + ')' : ''}`,
+                 detail: s?.closure_name ? `at ${s.closure_name}` : '' };
+      }
       const c = cables.get(+id);
       return { key, type: 'cable_fiber', label: `${c ? c.name : 'Cable #' + id} (link cable) — fiber ${fiber}`,
                detail: '' };
     };
 
-    // Build adjacency
+    // Build adjacency. Each edge carries loss_db and (for splitter edges) side.
     const adj = new Map();
     const addEdge = (a, b, via) => {
       if (!a || !b || a === b) return;
@@ -1326,18 +1477,18 @@ app.get('/api/trace', requireAuth, async (req, res) => {
     };
 
     for (const s of splicesR.rows) {
-      const a = cableNode(s.from_cable_id, s.from_fiber);
-      const b = cableNode(s.to_cable_id, s.to_fiber);
+      const a = cableNode(s.from_cable_id, s.from_fiber + 1);
+      const b = cableNode(s.to_cable_id, s.to_fiber + 1);
       addEdge(a, b, {
-        kind: 'splice', splice_type: s.splice_type, closure_id: s.closure_id,
-        label: `Splice (${s.splice_type})${s.closure_name ? ' @ ' + s.closure_name : ''}: f${s.from_fiber} → f${s.to_fiber}`,
+        kind: 'splice', loss_db: LOSS_SPLICE, closure_id: s.closure_id,
+        label: `Splice (${s.splice_type})${s.closure_name ? ' @ ' + s.closure_name : ''}: f${s.from_fiber + 1} → f${s.to_fiber + 1}`,
       });
     }
 
     const connSideNode = (portId, pfId, strand) => {
       if (portId) return `port:${portId}`;
       const pf = pfs.get(pfId);
-      return pf ? `rf:${pf.route_id}:${strand}` : null;
+      return pf ? `rf:${pf.route_id}:${strand}` : null; // strand already 1-based
     };
     for (const c of connsR.rows) {
       const a = connSideNode(c.a_port_id, c.a_panel_fiber_id, c.a_strand);
@@ -1345,48 +1496,78 @@ app.get('/api/trace', requireAuth, async (req, res) => {
       const pf = pfs.get(c.a_panel_fiber_id || c.b_panel_fiber_id);
       const isJumper = !c.a_port_id && !c.b_port_id;
       addEdge(a, b, {
-        kind: isJumper ? 'jumper' : 'patch',
+        kind: isJumper ? 'jumper' : 'patch', loss_db: LOSS_PATCH,
         label: pf
           ? `${isJumper ? 'Jumper' : 'Patched'} at ${pf.panel_name}${pf.site_name ? ' (' + pf.site_name + ')' : ''}`
           : 'Direct connection',
       });
     }
 
-    // Resolve start node
+    // Splitter edges: input fiber ↔ spl (trunk, no loss), spl ↔ each output leg (leg loss)
+    const outputsBySplitter = new Map();
+    soR.rows.forEach(o => {
+      if (!outputsBySplitter.has(o.splitter_id)) outputsBySplitter.set(o.splitter_id, []);
+      outputsBySplitter.get(o.splitter_id).push(o);
+    });
+    for (const s of splittersR.rows) {
+      const splKey = `spl:${s.id}`;
+      const inNode = cableNode(s.input_cable_id, s.input_fiber != null ? s.input_fiber + 1 : null);
+      if (inNode) addEdge(inNode, splKey, { kind: 'splitter', side: 'trunk', loss_db: 0, label: 'Splitter input' });
+      for (const o of (outputsBySplitter.get(s.id) || [])) {
+        const outNode = cableNode(o.output_cable_id, o.output_fiber != null ? o.output_fiber + 1 : null);
+        if (!outNode) continue;
+        const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
+        addEdge(splKey, outNode, {
+          kind: 'splitter', side: 'leg', loss_db: Number(o.loss_db) || 0,
+          label: `Splitter leg ${o.label || o.leg_index}${pct} (−${(Number(o.loss_db) || 0).toFixed(1)} dB)`,
+        });
+      }
+    }
+
+    // Resolve start node (start fibers given 0-based for route/fiber query, like splices)
     let startKey = null;
     if (req.query.port) startKey = `port:${+req.query.port}`;
     else if (req.query.panel_fiber && req.query.strand) {
       const pf = pfs.get(+req.query.panel_fiber);
-      if (pf) startKey = `rf:${pf.route_id}:${+req.query.strand}`;
+      if (pf) startKey = `rf:${pf.route_id}:${+req.query.strand}`; // strand 1-based
     } else if (req.query.route && req.query.fiber) {
-      startKey = `rf:${+req.query.route}:${+req.query.fiber}`;
+      startKey = `rf:${+req.query.route}:${+req.query.fiber + 1}`; // fiber 0-based → 1-based
     }
     if (!startKey) return res.status(400).json({ error: 'Specify port, panel_fiber+strand, or route+fiber' });
 
-    // DFS walk emitting hops in path order; depth increases per hop so the
-    // common linear path renders as a chain and branches indent further
+    // DFS walk emitting hops in path order, tracking cumulative loss and the
+    // edge used to enter each node (so splitters can enforce directionality).
     const visited = new Set([startKey]);
     const steps = [];
     const routeIds = new Set();
     let branched = false;
+    let maxLoss = 0;
     const startInfo = nodeInfo(startKey);
     if (startInfo.route_id) routeIds.add(startInfo.route_id);
 
-    const walk = (key, depth) => {
-      const edges = (adj.get(key) || []).filter(e => !visited.has(e.to));
+    const walk = (key, depth, cumLoss, enteredVia) => {
+      let edges = (adj.get(key) || []).filter(e => !visited.has(e.to));
+      // Splitter directionality: entering via a leg may only exit the trunk
+      // (upstream); entering via the trunk fans out to every leg (PON tree).
+      if (key.startsWith('spl:') && enteredVia && enteredVia.kind === 'splitter') {
+        if (enteredVia.side === 'leg')        edges = edges.filter(e => e.via.side === 'trunk');
+        else if (enteredVia.side === 'trunk') edges = edges.filter(e => e.via.side === 'leg');
+      }
       if (edges.length > 1) branched = true;
       for (const e of edges) {
-        if (visited.has(e.to)) continue; // re-check: earlier sibling may have claimed it
+        if (visited.has(e.to)) continue; // earlier sibling may have claimed it
         visited.add(e.to);
         const info = nodeInfo(e.to);
         if (info.route_id) routeIds.add(info.route_id);
-        steps.push({ depth, via: e.via, node: info });
-        walk(e.to, depth + 1);
+        const loss = +(cumLoss + (e.via.loss_db || 0)).toFixed(2);
+        if (info.type !== 'splitter' && loss > maxLoss) maxLoss = loss;
+        steps.push({ depth, via: e.via, node: info, cum_loss_db: loss });
+        walk(e.to, depth + 1, loss, e.via);
       }
     };
-    walk(startKey, 1);
+    walk(startKey, 1, 0, null);
 
-    res.json({ start: startInfo, steps, route_ids: [...routeIds], branched });
+    res.json({ start: startInfo, steps, route_ids: [...routeIds], branched, total_loss_db: maxLoss });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -1711,6 +1892,36 @@ async function getDefaultLayerId() {
   return r.rows[0]?.id || null;
 }
 
+// Idempotent schema additions applied at boot — keeps installed DBs in sync
+// with features added after the initial schema.sql import.
+async function ensureSchema() {
+  await pool.query(`
+    ALTER TABLE splitters ADD COLUMN IF NOT EXISTS splitter_type varchar(10) DEFAULT 'balanced';
+    ALTER TABLE splitters ADD COLUMN IF NOT EXISTS excess_loss_db numeric(5,2) DEFAULT 0;
+    CREATE TABLE IF NOT EXISTS splitter_outputs (
+      id serial PRIMARY KEY,
+      splitter_id integer NOT NULL REFERENCES splitters(id) ON DELETE CASCADE,
+      leg_index integer NOT NULL,
+      label varchar(30),
+      output_cable_id integer REFERENCES cables(id) ON DELETE SET NULL,
+      output_fiber integer,
+      tap_percent numeric(5,2),
+      loss_db numeric(5,2),
+      UNIQUE (splitter_id, leg_index)
+    );
+  `);
+}
+
+// Optical loss for one leg of a balanced 1:N splitter (split loss + excess).
+function balancedLegLoss(n, excess) {
+  return +(10 * Math.log10(n) + (Number(excess) || 0)).toFixed(2);
+}
+// Optical loss for one leg of an unbalanced tap, given that leg's power share %.
+function tapLegLoss(percent, excess) {
+  const p = Math.max(0.01, Math.min(100, Number(percent) || 0));
+  return +(-10 * Math.log10(p / 100) + (Number(excess) || 0)).toFixed(2);
+}
+
 async function ensureDefaultLayer() {
   await pool.query(`INSERT INTO layer_groups(name,visible,sort_order) SELECT 'Default',true,0 WHERE NOT EXISTS (SELECT 1 FROM layer_groups WHERE name='Default')`);
   const g = await pool.query(`SELECT id FROM layer_groups WHERE name='Default' LIMIT 1`);
@@ -1832,6 +2043,11 @@ app.delete('/api/layers/:id', requireAdmin, async (req, res) => {
 // ============ START SERVER ============
 
 app.listen(PORT, '0.0.0.0', async () => {
+  try {
+    await ensureSchema();
+  } catch (err) {
+    console.error('Schema migration failed (some features may be unavailable):', err.message);
+  }
   await ensureDefaultLayer();
   console.log(`Open Fiber Map backend running on port ${PORT}`);
 });

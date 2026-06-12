@@ -375,6 +375,9 @@ let state = {
 let map;
 let _mapLayersPanelOpen = false;
 const panelState = { expandedCables: new Set(), expandedTubes: new Set() };
+// When set, the next fiber clicked is assigned to this splitter leg/input
+// instead of starting a splice. { splitterId, target: 'input' | <legIndex> }
+let splitterAssign = null;
 
 // ============ API HELPERS ============
 async function api(method, path, body) {
@@ -2696,14 +2699,16 @@ async function openClosurePanel(closureId) {
   const closure = state.closures.find(c => c.id === closureId);
   if (!closure) return;
   // Load cables and splices
-  const [cables, splices, fieldValues] = await Promise.all([
+  const [cables, splices, fieldValues, splitters] = await Promise.all([
     api('GET', `/closures/${closureId}/cables`),
     api('GET', `/closures/${closureId}/splices`),
     api('GET', `/field-values/closure/${closureId}`),
+    api('GET', `/closures/${closureId}/splitters`),
   ]);
   closure.cables = cables;
   closure.splices = splices;
   closure.fieldValues = fieldValues;
+  closure.splitters = splitters;
   // Pre-load sibling closures' cables so the Add Cable picker can filter them out
   if (closure.pole_id) {
     const siblings = state.closures.filter(cl => cl.pole_id === closure.pole_id && cl.id !== closureId);
@@ -2718,6 +2723,8 @@ async function openClosurePanel(closureId) {
   state.selectedClosure = closureId;
   state.selectedFiber = null;
   state.showAddCable = false;
+  state.showAddSplitter = false;
+  splitterAssign = null;
   document.getElementById('side-panel').classList.add('open');
   renderPanel();
 }
@@ -2726,6 +2733,7 @@ function closePanel() {
   document.getElementById('side-panel').classList.remove('open');
   state.selectedClosure = null;
   state.selectedFiber = null;
+  splitterAssign = null;
 }
 
 function renderPanel() {
@@ -2753,7 +2761,7 @@ function renderPanel() {
           }
           return mf ? `<div class="panel-meta-fields">${mf}</div>` : '';
         })()}
-        <div class="meta">${c.cables.length} cable(s) · ${c.splices.length} splice(s)</div>
+        <div class="meta">${c.cables.length} cable(s) · ${c.splices.length} splice(s)${(c.splitters && c.splitters.length) ? ` · ${c.splitters.length} splitter(s)` : ''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:4px;">
         ${c.pole_id ? `<button class="icon-btn" title="View pole" style="font-size:15px;" onclick="openViewModal('pole',${c.pole_id},state.poles.find(p=>p.id===${c.pole_id}))">📍</button>` : ''}
@@ -2763,7 +2771,14 @@ function renderPanel() {
     </div>
   `;
 
-  if (sel) {
+  if (splitterAssign) {
+    const sp = c.splitters.find(s => s.id === splitterAssign.splitterId);
+    const tgt = splitterAssign.target === 'input' ? 'input' : `leg ${splitterAssign.target}`;
+    html += `<div class="sel-bar" style="background:#fff3e0;border-color:#ffcc80;">
+      <span>🌳 Assigning ${h(sp?.name || 'splitter')} ${tgt} — click a fiber to bind it</span>
+      <button onclick="splitterAssign=null;renderPanel();">×</button>
+    </div>`;
+  } else if (sel) {
     const sc = c.cables.find(x => x.id === sel.cableId);
     const fc = FIBER_COLORS[sel.fiberIdx % 12];
     html += `<div class="sel-bar">
@@ -2930,11 +2945,79 @@ function renderPanel() {
     html += '</div>';
   }
 
+  html += renderSplitterSection(c);
+
   html += `<div style="padding:10px;">
     <button class="add-btn" onclick="deleteClosure(${c.id})" style="border-color:#ffcdd2;color:#c62828;">Delete closure</button>
   </div>`;
 
   document.getElementById('side-panel').innerHTML = html;
+}
+
+// Builds a 1-line description of a cable fiber, or an Assign button if unset
+function fiberRefLabel(c, cableId, fiber0, onAssign) {
+  if (cableId == null || fiber0 == null) {
+    return `<button class="add-btn" style="padding:2px 8px;font-size:0.8em;display:inline;width:auto;" onclick="${onAssign}">Assign fiber</button>`;
+  }
+  const cable = c.cables.find(x => x.id === cableId);
+  const fc = FIBER_COLORS[fiber0 % 12];
+  return `<span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};width:9px;height:9px;"></span>
+    ${h(cable?.name || '?')} F${fiber0 + 1}
+    <button class="icon-btn" style="font-size:11px;" title="Reassign" onclick="${onAssign}">✏️</button>`;
+}
+
+function renderSplitterSection(c) {
+  let html = '<div class="section-title">Splitters &amp; Taps</div>';
+  (c.splitters || []).forEach(sp => {
+    const isTap = sp.splitter_type === 'tap';
+    const badge = isTap ? 'TAP' : (sp.ratio || '1:N');
+    html += `<div class="cable" style="border-left:3px solid #ff9800;">
+      <div class="cable-hdr" style="cursor:default;">
+        <span>🌳 ${h(sp.name)} · <span class="dir-badge" style="background:#fff3e0;color:#e65100;">${h(badge)}</span></span>
+        <button class="icon-btn" onclick="deleteSplitter(${sp.id})" title="Delete">🗑</button>
+      </div>
+      <div style="padding:4px 10px;font-size:0.85em;">
+        <div style="margin:3px 0;"><span style="color:#888;">Input:</span>
+          ${fiberRefLabel(c, sp.input_cable_id, sp.input_fiber, `beginSplitterAssign(${sp.id},'input')`)}</div>`;
+    (sp.outputs || []).forEach(o => {
+      const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
+      const loss = o.loss_db != null ? ` <span style="color:#1565c0;">−${(+o.loss_db).toFixed(1)}dB</span>` : '';
+      html += `<div style="margin:3px 0;"><span style="color:#888;">Leg ${h(o.label || o.leg_index)}${pct}${loss}:</span>
+        ${fiberRefLabel(c, o.output_cable_id, o.output_fiber, `beginSplitterAssign(${sp.id},${o.leg_index})`)}</div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  if (state.showAddSplitter) {
+    html += `<div class="form-card">
+      <label>Name</label>
+      <input id="sp-name" value="SPL-${(c.splitters?.length || 0) + 1}">
+      <label>Type</label>
+      <select id="sp-type" onchange="document.getElementById('sp-balanced').style.display=this.value==='balanced'?'':'none';document.getElementById('sp-tap').style.display=this.value==='tap'?'':'none';">
+        <option value="balanced">Balanced splitter (1:N)</option>
+        <option value="tap">Unbalanced tap</option>
+      </select>
+      <div id="sp-balanced">
+        <label>Ratio</label>
+        <select id="sp-ratio">
+          ${['1:2','1:4','1:8','1:16','1:32','1:64'].map(r => `<option value="${r}">${r}</option>`).join('')}
+        </select>
+      </div>
+      <div id="sp-tap" style="display:none;">
+        <label>Tap split (tap % / pass %)</label>
+        <select id="sp-tappct">
+          ${[['5','95'],['10','90'],['20','80'],['30','70'],['50','50']].map(([t,p]) => `<option value="${t}">${t}/${p}</option>`).join('')}
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="primary" onclick="doAddSplitter()">Add</button>
+        <button onclick="state.showAddSplitter=false;renderPanel();">Cancel</button>
+      </div>
+    </div>`;
+  } else {
+    html += `<button class="add-btn" onclick="state.showAddSplitter=true;renderPanel();">+ Add splitter / tap</button>`;
+  }
+  return html;
 }
 
 function toggleCable(cableId) {
@@ -2959,8 +3042,67 @@ function toggleTube(cableId, tubeIdx) {
   renderPanel();
 }
 
+async function doAddSplitter() {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c) return;
+  const name = document.getElementById('sp-name').value.trim() || 'SPL';
+  const type = document.getElementById('sp-type').value;
+  const body = { closure_id: c.id, name, splitter_type: type };
+  if (type === 'tap') {
+    const tap = parseInt(document.getElementById('sp-tappct').value, 10);
+    body.ratio = `${tap}/${100 - tap}`;
+    body.outputs = [{ label: 'tap', tap_percent: tap }, { label: 'pass', tap_percent: 100 - tap }];
+  } else {
+    body.ratio = document.getElementById('sp-ratio').value;
+  }
+  try {
+    const sp = await api('POST', '/splitters', body);
+    if (!c.splitters) c.splitters = [];
+    c.splitters.push(sp);
+    state.showAddSplitter = false;
+    renderPanel();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+function beginSplitterAssign(splitterId, target) {
+  splitterAssign = { splitterId, target };
+  state.selectedFiber = null;
+  renderPanel();
+}
+
+async function assignSplitterFiber(cableId, fiberIdx) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const sp = c.splitters.find(s => s.id === splitterAssign.splitterId);
+  if (!sp) { splitterAssign = null; return renderPanel(); }
+  const payload = { outputs: [] };
+  if (splitterAssign.target === 'input') {
+    payload.input_cable_id = cableId;
+    payload.input_fiber = fiberIdx;
+  } else {
+    payload.outputs = [{ leg_index: splitterAssign.target, output_cable_id: cableId, output_fiber: fiberIdx }];
+  }
+  try {
+    const updated = await api('PUT', '/splitters/' + sp.id, payload);
+    Object.assign(sp, updated);
+    splitterAssign = null;
+    renderPanel();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function deleteSplitter(id) {
+  if (!confirm('Delete this splitter?')) return;
+  try {
+    await api('DELETE', '/splitters/' + id);
+    const c = state.closures.find(x => x.id === state.selectedClosure);
+    c.splitters = c.splitters.filter(s => s.id !== id);
+    if (splitterAssign && splitterAssign.splitterId === id) splitterAssign = null;
+    renderPanel();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
 async function selectFiber(cableId, fiberIdx) {
   const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (splitterAssign) { return assignSplitterFiber(cableId, fiberIdx); }
   const sel = state.selectedFiber;
   if (sel && sel.cableId !== cableId) {
     // Create splice

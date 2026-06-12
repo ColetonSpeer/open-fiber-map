@@ -911,8 +911,8 @@ async function deleteSite() {
 
 // ── Fiber trace ────────────────────────────────────────────────────────────
 
-const TRACE_ICONS = { splice: '⚡', patch: '🔌', jumper: '🔌' };
-const TRACE_NODE_ICONS = { port: '🖥️', route_fiber: '〰️', cable_fiber: '〰️' };
+const TRACE_ICONS = { splice: '⚡', patch: '🔌', jumper: '🔌', splitter: '🌳' };
+const TRACE_NODE_ICONS = { port: '🖥️', route_fiber: '〰️', cable_fiber: '〰️', splitter: '🌳' };
 
 async function openTraceModal(portId) {
   document.getElementById('trace-modal-bg').style.display = 'flex';
@@ -924,7 +924,9 @@ async function openTraceModal(portId) {
   if (!r.ok) { body.innerHTML = '<div style="color:#c62828;">Trace failed.</div>'; return; }
   const t = await r.json();
 
-  const nodeLine = (n) => `<span style="margin-right:5px;">${TRACE_NODE_ICONS[n.type] || '•'}</span>
+  const lossTag = (db) => db != null
+    ? `<span style="float:right;font-size:11px;color:#1565c0;font-weight:600;">${db.toFixed(1)} dB</span>` : '';
+  const nodeLine = (n, db) => `${lossTag(db)}<span style="margin-right:5px;">${TRACE_NODE_ICONS[n.type] || '•'}</span>
     <strong>${esc(n.label)}</strong>${n.detail ? ` <span style="color:#888;">${esc(n.detail)}</span>` : ''}`;
 
   let html = `<div style="padding:6px 8px;background:#e3f2fd;border-radius:6px;margin-bottom:4px;">${nodeLine(t.start)}</div>`;
@@ -933,12 +935,19 @@ async function openTraceModal(portId) {
   }
   for (const s of t.steps) {
     const indent = 10 + (s.depth - 1) * 18;
+    const isSplitter = s.node.type === 'splitter';
     html += `<div style="padding:2px 0 2px ${indent}px;color:#777;font-size:12px;">
         ${TRACE_ICONS[s.via.kind] || '·'} ${esc(s.via.label)}</div>
-      <div style="padding:5px 8px;margin-left:${indent}px;background:#f5f7fa;border-radius:6px;margin-bottom:3px;">${nodeLine(s.node)}</div>`;
+      <div style="padding:5px 8px;margin-left:${indent}px;background:${isSplitter ? '#fff3e0' : '#f5f7fa'};border-radius:6px;margin-bottom:3px;">${nodeLine(s.node, isSplitter ? null : s.cum_loss_db)}</div>`;
+  }
+  if (t.total_loss_db != null && t.steps.length) {
+    const over = t.total_loss_db > 28;
+    html += `<div style="margin-top:10px;padding:8px 10px;border-radius:6px;background:${over ? '#ffebee' : '#e8f5e9'};font-size:13px;">
+      <strong>Total path loss: ${t.total_loss_db.toFixed(1)} dB</strong>
+      <span style="color:#888;">${over ? '— exceeds typical 28 dB PON budget' : '(splices, connectors & splitters)'}</span></div>`;
   }
   if (t.branched) {
-    html += `<div style="color:#e65100;font-size:12px;margin-top:8px;">⚠️ This path branches (duplex pair, shared fiber, or data anomaly) — indentation shows each branch.</div>`;
+    html += `<div style="color:#e65100;font-size:12px;margin-top:8px;">⚠️ This path branches (splitter tree, duplex pair, or shared fiber) — indentation shows each branch, loss shown per branch.</div>`;
   }
   body.innerHTML = html;
   if (t.route_ids.length) {
