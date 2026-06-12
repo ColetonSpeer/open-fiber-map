@@ -1429,6 +1429,14 @@ app.get('/api/trace', requireAuth, async (req, res) => {
       pool.query('SELECT * FROM splitter_outputs'),
     ]);
 
+    // Latest optical reading per port, for measured-vs-calculated correlation
+    const opticalR = await pool.query(
+      `SELECT DISTINCT ON (port_id) port_id, rx_dbm, tx_dbm, measured_at
+       FROM optical_measurements WHERE port_id IS NOT NULL
+       ORDER BY port_id, measured_at DESC`
+    );
+    const optical = new Map(opticalR.rows.map(o => [o.port_id, o]));
+
     const cables = new Map(cablesR.rows.map(c => [c.id, c]));
     const ports  = new Map(portsR.rows.map(p => [p.id, p]));
     const pfs    = new Map(pfR.rows.map(f => [f.id, f]));
@@ -1446,8 +1454,12 @@ app.get('/api/trace', requireAuth, async (req, res) => {
       const [type, id, fiber] = key.split(':');
       if (type === 'port') {
         const p = ports.get(+id);
+        const o = optical.get(+id);
         return { key, type: 'port', label: p ? `${p.eq_name} › ${p.port_label}` : `Port #${id}`,
-                 detail: p?.site_name ? `at ${p.site_name}` : '', site_id: p?.site_id ?? null };
+                 detail: p?.site_name ? `at ${p.site_name}` : '', site_id: p?.site_id ?? null,
+                 rx_dbm: o ? (o.rx_dbm != null ? +o.rx_dbm : null) : null,
+                 tx_dbm: o ? (o.tx_dbm != null ? +o.tx_dbm : null) : null,
+                 measured_at: o ? o.measured_at : null };
       }
       if (type === 'rf') {
         const r = routes.get(+id);
@@ -1572,6 +1584,286 @@ app.get('/api/trace', requireAuth, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// ── Optical light-level monitoring ───────────────────────────────────────────
+// A monitored_device polls real equipment for per-interface rx/tx optical power
+// and stores time-series readings. Drivers are keyed by vendor; each returns
+//   [{ interface_name, rx_dbm, tx_dbm, temperature_c }]
+// Interfaces are mapped to equipment_ports by matching port_label.
+
+const http = require('http');
+const https = require('https');
+
+// Minimal JSON HTTP client. Allows self-signed TLS (internal mgmt interfaces).
+function httpRequest(urlStr, { method = 'GET', headers = {}, body = null, timeoutMs = 8000 } = {}) {
+  return new Promise((resolve, reject) => {
+    let url;
+    try { url = new URL(urlStr); } catch (e) { return reject(new Error('Bad URL: ' + urlStr)); }
+    const mod = url.protocol === 'https:' ? https : http;
+    const payload = body != null ? (typeof body === 'string' ? body : JSON.stringify(body)) : null;
+    const opts = {
+      method, headers: { ...headers }, rejectUnauthorized: false,
+    };
+    if (payload != null) {
+      opts.headers['Content-Type'] = opts.headers['Content-Type'] || 'application/json';
+      opts.headers['Content-Length'] = Buffer.byteLength(payload);
+    }
+    const req = mod.request(url, opts, (resp) => {
+      let data = '';
+      resp.on('data', c => data += c);
+      resp.on('end', () => {
+        let json = null;
+        try { json = data ? JSON.parse(data) : null; } catch (_) {}
+        resolve({ status: resp.statusCode, body: data, json });
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => { req.destroy(new Error('Request timed out')); });
+    if (payload != null) req.write(payload);
+    req.end();
+  });
+}
+
+const round2 = (n) => (n == null || isNaN(n) ? null : Math.round(n * 100) / 100);
+
+const DRIVERS = {
+  // Generates realistic readings so the full pipeline (poll → store → display →
+  // trace correlation) is verifiable without hardware. One reading per port.
+  async simulator(device, ports) {
+    const ifaces = ports.length ? ports.map(p => p.port_label)
+      : ['xe-0/0/0', 'xe-0/0/1', 'ge-0/0/0'];
+    return ifaces.map(name => {
+      // PON/SFP-ish values: tx near launch power, rx attenuated downstream
+      const tx = 1.5 + (Math.random() * 3 - 1.5);        // ~ -0 .. +4.5 dBm
+      const rx = -16 + (Math.random() * 8 - 4);          // ~ -20 .. -12 dBm
+      const temp = 38 + (Math.random() * 10 - 5);        // ~ 33 .. 43 °C
+      return { interface_name: name, tx_dbm: round2(tx), rx_dbm: round2(rx), temperature_c: round2(temp) };
+    });
+  },
+
+  // Calix — SMx / Calix Cloud northbound REST. Auth for a bearer token, then
+  // read ONT/port optical status. Endpoint paths vary by SMx version, so the
+  // base path is configurable (device.base_path) and the JSON parse is lenient.
+  async calix(device, ports) {
+    const scheme = (device.port === 80 || device.port === 8080) ? 'http' : 'https';
+    const origin = `${scheme}://${device.host}:${device.port || 18443}`;
+    const base = device.base_path || '/rest/v1';
+
+    // 1) Authenticate → token
+    const auth = await httpRequest(`${origin}${base}/auth/token`, {
+      method: 'POST', body: { username: device.username, password: device.secret },
+    });
+    if (auth.status >= 400 || !auth.json) {
+      throw new Error(`Calix auth failed (HTTP ${auth.status})`);
+    }
+    const token = auth.json.token || auth.json.access_token || auth.json.sessionId;
+    if (!token) throw new Error('Calix auth returned no token');
+
+    // 2) Fetch optical status for this device's ONTs/ports
+    const opt = await httpRequest(`${origin}${base}/devices/${encodeURIComponent(device.username && device.host)}/optical`, {
+      method: 'GET', headers: { Authorization: `Bearer ${token}` },
+    });
+    if (opt.status >= 400 || !opt.json) throw new Error(`Calix optical query failed (HTTP ${opt.status})`);
+
+    // Lenient parse: accept {interfaces:[...]} or a bare array. Each item may
+    // use rxPower/txPower or rx_dbm/tx_dbm naming.
+    const items = Array.isArray(opt.json) ? opt.json
+      : (opt.json.interfaces || opt.json.onts || opt.json.data || []);
+    return items.map(it => ({
+      interface_name: it.interface || it.name || it.ontId || it.port,
+      rx_dbm: round2(parseFloat(it.rxPower ?? it.rx_dbm ?? it.rxOpticalPower)),
+      tx_dbm: round2(parseFloat(it.txPower ?? it.tx_dbm ?? it.txOpticalPower)),
+      temperature_c: round2(parseFloat(it.temperature ?? it.temp)),
+    })).filter(r => r.interface_name);
+  },
+
+  // Arista — eAPI (JSON-RPC over HTTP/S). "show interfaces transceiver" returns
+  // rxPower/txPower in dBm per interface.
+  async arista(device, ports) {
+    const scheme = device.port === 80 ? 'http' : 'https';
+    const origin = `${scheme}://${device.host}:${device.port || 443}/command-api`;
+    const authHeader = 'Basic ' + Buffer.from(`${device.username}:${device.secret}`).toString('base64');
+    const rpc = {
+      jsonrpc: '2.0', method: 'runCmds', id: 'ofm',
+      params: { version: 1, cmds: ['show interfaces transceiver'], format: 'json' },
+    };
+    const r = await httpRequest(origin, { method: 'POST', headers: { Authorization: authHeader }, body: rpc });
+    if (r.status >= 400 || !r.json) throw new Error(`Arista eAPI failed (HTTP ${r.status})`);
+    if (r.json.error) throw new Error('Arista eAPI: ' + (r.json.error.message || 'error'));
+    const ifaces = r.json.result?.[0]?.interfaces || {};
+    return Object.entries(ifaces).map(([name, d]) => ({
+      interface_name: name,
+      rx_dbm: round2(d.rxPower), tx_dbm: round2(d.txPower), temperature_c: round2(d.temperature),
+    }));
+  },
+
+  // Juniper — optical DDM lives in the jnxDomCurrent MIB (SNMP) or
+  // "show interfaces diagnostics optics" (NETCONF). Both need a transport
+  // library not bundled here; wire one in to enable.
+  async juniper() {
+    throw new Error('Juniper polling needs SNMP (jnxDomCurrent MIB) or NETCONF support — not yet bundled. Use the simulator vendor to test, or add net-snmp.');
+  },
+};
+
+async function pollDevice(deviceRow) {
+  const device = { ...deviceRow, secret: decryptSecret(deviceRow.secret_enc) };
+  const driver = DRIVERS[device.vendor];
+  if (!driver) throw new Error('No driver for vendor: ' + device.vendor);
+  const portsR = await pool.query(
+    'SELECT id, port_label FROM equipment_ports WHERE equipment_id=$1 ORDER BY port_order, id',
+    [device.equipment_id]
+  );
+  const ports = portsR.rows;
+  const readings = await driver(device, ports) || [];
+  const byLabel = new Map(ports.map(p => [String(p.port_label).toLowerCase(), p.id]));
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const r of readings) {
+      const portId = byLabel.get(String(r.interface_name || '').toLowerCase()) || null;
+      await client.query(
+        `INSERT INTO optical_measurements (device_id, port_id, interface_name, rx_dbm, tx_dbm, temperature_c)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [device.id, portId, r.interface_name || null, r.rx_dbm ?? null, r.tx_dbm ?? null, r.temperature_c ?? null]
+      );
+    }
+    await client.query(
+      `UPDATE monitored_devices SET last_polled_at=now(), last_status='ok', last_error=NULL WHERE id=$1`,
+      [device.id]
+    );
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  return readings;
+}
+
+async function pollDeviceSafe(deviceRow) {
+  try {
+    const readings = await pollDevice(deviceRow);
+    return { ok: true, count: readings.length };
+  } catch (e) {
+    await pool.query(
+      `UPDATE monitored_devices SET last_polled_at=now(), last_status='error', last_error=$2 WHERE id=$1`,
+      [deviceRow.id, String(e.message).slice(0, 500)]
+    ).catch(() => {});
+    return { ok: false, error: e.message };
+  }
+}
+
+// Background scheduler: every 30s, poll devices whose interval has elapsed.
+let _pollTimer = null;
+async function pollScheduler() {
+  try {
+    const due = await pool.query(
+      `SELECT * FROM monitored_devices
+       WHERE enabled AND poll_interval_sec > 0
+         AND (last_polled_at IS NULL OR last_polled_at < now() - make_interval(secs => poll_interval_sec))`
+    );
+    for (const d of due.rows) await pollDeviceSafe(d);
+  } catch (e) { console.error('Poll scheduler error:', e.message); }
+}
+
+const devicePublic = (d) => ({
+  id: d.id, equipment_id: d.equipment_id, name: d.name, vendor: d.vendor,
+  host: d.host, port: d.port, username: d.username, base_path: d.base_path,
+  poll_interval_sec: d.poll_interval_sec, enabled: d.enabled,
+  last_polled_at: d.last_polled_at, last_status: d.last_status, last_error: d.last_error,
+  has_secret: !!d.secret_enc,
+});
+
+app.get('/api/sites/:id/devices', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT d.*, e.name AS equipment_name FROM monitored_devices d
+       JOIN equipment e ON e.id = d.equipment_id WHERE e.site_id=$1 ORDER BY d.id`,
+      [req.params.id]
+    );
+    res.json(r.rows.map(d => ({ ...devicePublic(d), equipment_name: d.equipment_name })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Latest reading per port for a site's equipment (for inline display)
+app.get('/api/sites/:id/optical', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT DISTINCT ON (port_id) port_id, rx_dbm, tx_dbm, temperature_c, measured_at, interface_name
+       FROM optical_measurements
+       WHERE port_id IN (SELECT id FROM equipment_ports WHERE equipment_id IN
+         (SELECT id FROM equipment WHERE site_id=$1))
+       ORDER BY port_id, measured_at DESC`,
+      [req.params.id]
+    );
+    const byPort = {};
+    r.rows.forEach(row => { byPort[row.port_id] = row; });
+    res.json(byPort);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/devices', requireAuth, async (req, res) => {
+  try {
+    const { equipment_id, name, vendor, host, port, username, secret, base_path,
+            poll_interval_sec, enabled } = req.body;
+    if (!equipment_id || !name || !vendor) return res.status(400).json({ error: 'equipment_id, name, vendor required' });
+    const r = await pool.query(
+      `INSERT INTO monitored_devices
+        (equipment_id,name,vendor,host,port,username,secret_enc,base_path,poll_interval_sec,enabled)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [equipment_id, name, vendor, host || null, port || null, username || null,
+       encryptSecret(secret), base_path || null, poll_interval_sec || 0,
+       enabled !== false]
+    );
+    res.json(devicePublic(r.rows[0]));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.put('/api/devices/:id', requireAuth, async (req, res) => {
+  try {
+    const cur = await pool.query('SELECT * FROM monitored_devices WHERE id=$1', [req.params.id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'Not found' });
+    const d = cur.rows[0];
+    const b = req.body;
+    // Only re-encrypt the secret when a non-empty new one is supplied
+    const secretEnc = (b.secret != null && b.secret !== '') ? encryptSecret(b.secret) : d.secret_enc;
+    const r = await pool.query(
+      `UPDATE monitored_devices SET name=$2, vendor=$3, host=$4, port=$5, username=$6,
+        secret_enc=$7, base_path=$8, poll_interval_sec=$9, enabled=$10 WHERE id=$1 RETURNING *`,
+      [d.id, b.name ?? d.name, b.vendor ?? d.vendor, b.host ?? d.host, b.port ?? d.port,
+       b.username ?? d.username, secretEnc, b.base_path ?? d.base_path,
+       b.poll_interval_sec ?? d.poll_interval_sec, b.enabled ?? d.enabled]
+    );
+    res.json(devicePublic(r.rows[0]));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/devices/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM monitored_devices WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/devices/:id/poll', requireAuth, async (req, res) => {
+  try {
+    const cur = await pool.query('SELECT * FROM monitored_devices WHERE id=$1', [req.params.id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'Not found' });
+    const result = await pollDeviceSafe(cur.rows[0]);
+    const refreshed = await pool.query('SELECT * FROM monitored_devices WHERE id=$1', [req.params.id]);
+    res.json({ ...result, device: devicePublic(refreshed.rows[0]) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.get('/api/devices/:id/measurements', requireAuth, async (req, res) => {
+  try {
+    const hours = Math.min(720, Math.max(1, parseInt(req.query.hours, 10) || 24));
+    const r = await pool.query(
+      `SELECT port_id, interface_name, rx_dbm, tx_dbm, temperature_c, measured_at
+       FROM optical_measurements
+       WHERE device_id=$1 AND measured_at > now() - make_interval(hours => $2)
+       ORDER BY measured_at`,
+      [req.params.id, hours]
+    );
+    res.json(r.rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── Custom field values ────────────────────────────────────────────────────
@@ -1909,7 +2201,59 @@ async function ensureSchema() {
       loss_db numeric(5,2),
       UNIQUE (splitter_id, leg_index)
     );
+    CREATE TABLE IF NOT EXISTS monitored_devices (
+      id serial PRIMARY KEY,
+      equipment_id integer REFERENCES equipment(id) ON DELETE CASCADE,
+      name varchar(100) NOT NULL,
+      vendor varchar(20) NOT NULL,
+      host varchar(255),
+      port integer,
+      username varchar(100),
+      secret_enc text,
+      base_path varchar(255),
+      poll_interval_sec integer DEFAULT 0,
+      enabled boolean DEFAULT true,
+      last_polled_at timestamptz,
+      last_status varchar(20),
+      last_error text,
+      created_at timestamptz DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS optical_measurements (
+      id bigserial PRIMARY KEY,
+      device_id integer REFERENCES monitored_devices(id) ON DELETE CASCADE,
+      port_id integer REFERENCES equipment_ports(id) ON DELETE SET NULL,
+      interface_name varchar(120),
+      rx_dbm numeric(6,2),
+      tx_dbm numeric(6,2),
+      temperature_c numeric(5,1),
+      measured_at timestamptz DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_optical_device_time ON optical_measurements (device_id, measured_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_optical_port_time ON optical_measurements (port_id, measured_at DESC);
   `);
+}
+
+// ── Credential encryption (AES-256-GCM, key derived from SESSION_SECRET) ──────
+const crypto = require('crypto');
+function credKey() {
+  return crypto.createHash('sha256').update(process.env.SESSION_SECRET || 'dev-only-insecure-key').digest();
+}
+function encryptSecret(plain) {
+  if (plain == null || plain === '') return null;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', credKey(), iv);
+  const ct = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return 'v1:' + [iv, tag, ct].map(b => b.toString('base64')).join(':');
+}
+function decryptSecret(enc) {
+  if (!enc || !enc.startsWith('v1:')) return null;
+  try {
+    const [, ivB, tagB, ctB] = enc.split(':');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', credKey(), Buffer.from(ivB, 'base64'));
+    decipher.setAuthTag(Buffer.from(tagB, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(ctB, 'base64')), decipher.final()]).toString('utf8');
+  } catch (_) { return null; }
 }
 
 // Optical loss for one leg of a balanced 1:N splitter (split loss + excess).
@@ -2049,5 +2393,6 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.error('Schema migration failed (some features may be unavailable):', err.message);
   }
   await ensureDefaultLayer();
+  _pollTimer = setInterval(pollScheduler, 30000); // background optical polling
   console.log(`Open Fiber Map backend running on port ${PORT}`);
 });

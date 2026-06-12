@@ -168,6 +168,41 @@
   </div>
 </div>
 
+<div id="device-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="closeDeviceModal()">
+  <div style="background:white;border-radius:10px;padding:20px;width:440px;max-width:92vw;max-height:86vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <h3 id="device-modal-title" style="margin:0 0 12px;font-size:16px;">Monitor</h3>
+    <input type="hidden" id="device-modal-eq"><input type="hidden" id="device-modal-id">
+    <label class="modal-label">Name</label>
+    <input id="dm-name" class="modal-input">
+    <label class="modal-label">Vendor / source</label>
+    <select id="dm-vendor" class="modal-input" onchange="updateDeviceModalFields()">
+      <option value="simulator">Simulator (test, no device)</option>
+      <option value="calix">Calix (SMx / Cloud REST)</option>
+      <option value="arista">Arista (eAPI)</option>
+      <option value="juniper">Juniper (SNMP/NETCONF — not yet bundled)</option>
+    </select>
+    <div id="dm-conn-fields">
+      <label class="modal-label">Host / IP</label>
+      <input id="dm-host" class="modal-input" placeholder="10.0.0.5 or mgmt.example.com">
+      <label class="modal-label">Port</label>
+      <input id="dm-port" class="modal-input" type="number" placeholder="Calix 18443 · Arista 443">
+      <label class="modal-label">Username</label>
+      <input id="dm-user" class="modal-input">
+      <label class="modal-label">Password / community</label>
+      <input id="dm-secret" class="modal-input" type="password" autocomplete="new-password">
+      <label class="modal-label">API base path (Calix, optional)</label>
+      <input id="dm-base" class="modal-input" placeholder="/rest/v1">
+    </div>
+    <label class="modal-label">Auto-poll interval (seconds, 0 = manual only)</label>
+    <input id="dm-interval" class="modal-input" type="number" min="0" value="0">
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveDevice()">Save</button>
+      <button class="btn btn-secondary" onclick="closeDeviceModal()">Cancel</button>
+      <button id="dm-delete" class="btn btn-danger" style="margin-left:auto;display:none;" onclick="deleteDevice()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div id="edit-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:8px;padding:24px;width:400px;max-width:95vw;max-height:90vh;overflow-y:auto;">
     <h2 style="margin-bottom:16px;font-size:16px;">Edit Site</h2>
@@ -405,6 +440,8 @@ let equipTemplates = [];
 let sfpTypes = [];
 let cardTypes = [];
 let equipFieldDefs = [];
+let monitoredDevices = [];   // optical-monitoring devices for this site's equipment
+let opticalLevels = {};      // port_id -> { rx_dbm, tx_dbm, temperature_c, measured_at }
 let _equipFieldValuesCache = {};
 let _editingEqId = null;
 let _connectingPortId = null;
@@ -437,7 +474,7 @@ function esc(str) {
 async function init() {
   if (!siteId) { showError(); return; }
   try {
-    const [siteRes, defsRes, valsRes, routesRes, panelsRes, connRes, equipRes, jumpRes, tmplRes, sfpRes, cardRes] = await Promise.all([
+    const [siteRes, defsRes, valsRes, routesRes, panelsRes, connRes, equipRes, jumpRes, tmplRes, sfpRes, cardRes, devRes, optRes] = await Promise.all([
       fetch('/api/sites/' + siteId, { credentials: 'include' }),
       fetch('/api/field-defs', { credentials: 'include' }),
       fetch('/api/field-values/site/' + siteId, { credentials: 'include' }),
@@ -449,6 +486,8 @@ async function init() {
       fetch('/api/equipment-templates', { credentials: 'include' }),
       fetch('/api/sfp-types', { credentials: 'include' }),
       fetch('/api/card-types', { credentials: 'include' }),
+      fetch('/api/sites/' + siteId + '/devices', { credentials: 'include' }),
+      fetch('/api/sites/' + siteId + '/optical', { credentials: 'include' }),
     ]);
     if (siteRes.status === 401) { window.location.href = '/'; return; }
     if (!siteRes.ok) { showError(); return; }
@@ -468,6 +507,8 @@ async function init() {
     equipTemplates = tmplRes.ok ? await tmplRes.json() : [];
     sfpTypes = sfpRes.ok ? await sfpRes.json() : [];
     cardTypes = cardRes.ok ? await cardRes.json() : [];
+    monitoredDevices = devRes.ok ? await devRes.json() : [];
+    opticalLevels = optRes.ok ? await optRes.json() : {};
     populateEqTemplateSelect();
     render();
     renderEquipment();
@@ -926,13 +967,28 @@ async function openTraceModal(portId) {
 
   const lossTag = (db) => db != null
     ? `<span style="float:right;font-size:11px;color:#1565c0;font-weight:600;">${db.toFixed(1)} dB</span>` : '';
+  // Measured level line for a port node (rx/tx dBm), if a recent reading exists
+  const levelLine = (n) => {
+    if (n.type !== 'port' || (n.rx_dbm == null && n.tx_dbm == null)) return '';
+    const parts = [];
+    if (n.rx_dbm != null) parts.push(`<span style="color:${rxColor(n.rx_dbm)};">Rx ${n.rx_dbm.toFixed(1)}</span>`);
+    if (n.tx_dbm != null) parts.push(`<span style="color:#555;">Tx ${n.tx_dbm.toFixed(1)}</span>`);
+    return `<div style="font-size:11px;color:#666;margin-top:2px;">📡 ${parts.join(' · ')} dBm</div>`;
+  };
   const nodeLine = (n, db) => `${lossTag(db)}<span style="margin-right:5px;">${TRACE_NODE_ICONS[n.type] || '•'}</span>
-    <strong>${esc(n.label)}</strong>${n.detail ? ` <span style="color:#888;">${esc(n.detail)}</span>` : ''}`;
+    <strong>${esc(n.label)}</strong>${n.detail ? ` <span style="color:#888;">${esc(n.detail)}</span>` : ''}${levelLine(n)}`;
 
   let html = `<div style="padding:6px 8px;background:#e3f2fd;border-radius:6px;margin-bottom:4px;">${nodeLine(t.start)}</div>`;
   if (!t.steps.length) {
     html += '<div style="color:#888;padding:6px 8px;">No connectivity beyond this port.</div>';
   }
+  // Collect terminal port nodes (path leaves) for measured-vs-calculated loss
+  const endpoints = [];
+  t.steps.forEach((s, i) => {
+    const next = t.steps[i + 1];
+    const isLeaf = !next || next.depth <= s.depth; // no deeper step follows
+    if (s.node.type === 'port' && isLeaf) endpoints.push(s);
+  });
   for (const s of t.steps) {
     const indent = 10 + (s.depth - 1) * 18;
     const isSplitter = s.node.type === 'splitter';
@@ -943,8 +999,22 @@ async function openTraceModal(portId) {
   if (t.total_loss_db != null && t.steps.length) {
     const over = t.total_loss_db > 28;
     html += `<div style="margin-top:10px;padding:8px 10px;border-radius:6px;background:${over ? '#ffebee' : '#e8f5e9'};font-size:13px;">
-      <strong>Total path loss: ${t.total_loss_db.toFixed(1)} dB</strong>
+      <strong>Calculated path loss: ${t.total_loss_db.toFixed(1)} dB</strong>
       <span style="color:#888;">${over ? '— exceeds typical 28 dB PON budget' : '(splices, connectors & splitters)'}</span></div>`;
+  }
+  // Measured insertion loss = start Tx − endpoint Rx, compared to calculated
+  if (t.start.tx_dbm != null) {
+    for (const ep of endpoints) {
+      if (ep.node.rx_dbm == null) continue;
+      const measured = +(t.start.tx_dbm - ep.node.rx_dbm).toFixed(2);
+      const calc = ep.cum_loss_db;
+      const delta = +(measured - calc).toFixed(2);
+      const bad = delta > 3; // measured notably higher than design → fault
+      html += `<div style="margin-top:6px;padding:8px 10px;border-radius:6px;background:${bad ? '#ffebee' : '#e3f2fd'};font-size:12px;">
+        <strong>Measured to ${esc(ep.node.label)}:</strong> ${measured.toFixed(1)} dB
+        (Tx ${t.start.tx_dbm.toFixed(1)} → Rx ${ep.node.rx_dbm.toFixed(1)})<br>
+        <span style="color:#555;">vs ${calc.toFixed(1)} dB calculated — Δ ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} dB${bad ? ' ⚠️ excess loss, check span' : ''}</span></div>`;
+    }
   }
   if (t.branched) {
     html += `<div style="color:#e65100;font-size:12px;margin-top:8px;">⚠️ This path branches (splitter tree, duplex pair, or shared fiber) — indentation shows each branch, loss shown per branch.</div>`;
@@ -960,6 +1030,23 @@ function closeTraceModal() {
 }
 
 // ── Equipment ──────────────────────────────────────────────────────────────
+
+// Color rx power by health: green ok, amber marginal, red out of spec.
+function rxColor(rx) {
+  if (rx == null) return '#888';
+  if (rx > -8 || rx < -28) return '#c62828';   // too hot / too low
+  if (rx < -25) return '#e65100';              // marginal
+  return '#2e7d32';
+}
+// Small inline optical-level badge for a port, or '' if no reading.
+function levelBadge(portId) {
+  const o = opticalLevels[portId];
+  if (!o || (o.rx_dbm == null && o.tx_dbm == null)) return '';
+  const parts = [];
+  if (o.rx_dbm != null) parts.push(`<span style="color:${rxColor(+o.rx_dbm)};">Rx ${(+o.rx_dbm).toFixed(1)}</span>`);
+  if (o.tx_dbm != null) parts.push(`<span style="color:#555;">Tx ${(+o.tx_dbm).toFixed(1)}</span>`);
+  return `<div style="font-size:11px;margin-top:2px;" title="measured ${o.measured_at ? new Date(o.measured_at).toLocaleString() : ''}">📡 ${parts.join(' · ')} dBm</div>`;
+}
 
 function buildPortRow(p, eq) {
   const connLabel = p.connector_type
@@ -996,7 +1083,7 @@ function buildPortRow(p, eq) {
       onclick="disconnectPort(null, ${pairId}, ${eq.id}, ${p.id})">Disconnect</button>`;
   }
   return `<tr>
-    <td style="padding:6px 10px;font-size:13px;">${esc(p.port_label)}</td>
+    <td style="padding:6px 10px;font-size:13px;">${esc(p.port_label)}${levelBadge(p.id)}</td>
     <td style="padding:6px 10px;">${connLabel}</td>
     <td style="padding:6px 10px;">${connectedCell}</td>
     <td style="padding:6px 4px;white-space:nowrap;">${actionBtn}
@@ -1037,7 +1124,7 @@ function buildSharedFiberPortRow(ports, eq) {
       onclick="disconnectPort(null, ${pairId}, ${eq.id}, ${first.id})">Disconnect</button>`;
   }
   return `<tr>
-    <td style="padding:6px 10px;font-size:13px;">${labelRange}</td>
+    <td style="padding:6px 10px;font-size:13px;">${labelRange}${levelBadge(first.id)}</td>
     <td style="padding:6px 10px;">${connLabel}</td>
     <td style="padding:6px 10px;">${connectedCell}</td>
     <td style="padding:6px 4px;white-space:nowrap;">${actionBtn}</td>
@@ -1243,6 +1330,7 @@ function renderEquipment() {
         <span style="font-size:14px;font-weight:600;">${esc(eq.name)}</span>
         ${eq.model ? `<span style="font-size:12px;color:#999;">${esc(eq.model)}</span>` : ''}
         ${eq.notes ? `<span style="font-size:12px;color:#aaa;font-style:italic;">${esc(eq.notes)}</span>` : ''}
+        ${monitorControl(eq)}
         <div style="margin-left:auto;display:flex;gap:6px;">
           <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
             onclick="openEqEditModal(${eq.id})">Edit</button>
@@ -1271,6 +1359,103 @@ function renderEquipment() {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Optical monitoring ───────────────────────────────────────────────────────
+
+const VENDOR_LABELS = { simulator: 'Simulator', calix: 'Calix', arista: 'Arista', juniper: 'Juniper' };
+
+// Compact monitoring status + actions shown in each equipment card header.
+function monitorControl(eq) {
+  const dev = monitoredDevices.find(d => d.equipment_id === eq.id);
+  if (!dev) {
+    return `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
+      onclick="openDeviceModal(${eq.id})" title="Set up optical monitoring">📡 Monitor</button>`;
+  }
+  const dot = dev.last_status === 'ok' ? '#2e7d32' : (dev.last_status === 'error' ? '#c62828' : '#aaa');
+  const when = dev.last_polled_at ? new Date(dev.last_polled_at).toLocaleTimeString() : 'never';
+  const title = dev.last_error ? `Error: ${dev.last_error}` : `${VENDOR_LABELS[dev.vendor] || dev.vendor} · last poll ${when}`;
+  return `<div style="display:flex;align-items:center;gap:5px;" title="${esc(title)}">
+    <span style="width:8px;height:8px;border-radius:50%;background:${dot};display:inline-block;"></span>
+    <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="pollDevice(${dev.id})">Poll now</button>
+    <button class="btn btn-secondary" style="font-size:11px;padding:2px 6px;" onclick="openDeviceModal(${eq.id})" title="Edit monitor">⚙</button>
+  </div>`;
+}
+
+function openDeviceModal(equipId) {
+  const dev = monitoredDevices.find(d => d.equipment_id === equipId);
+  const eq = equipment.find(e => e.id === equipId);
+  document.getElementById('device-modal-eq').value = equipId;
+  document.getElementById('device-modal-id').value = dev ? dev.id : '';
+  document.getElementById('device-modal-title').textContent =
+    (dev ? 'Edit' : 'Add') + ' monitor — ' + (eq ? eq.name : '');
+  document.getElementById('dm-name').value = dev?.name || (eq ? eq.name + ' monitor' : '');
+  document.getElementById('dm-vendor').value = dev?.vendor || 'simulator';
+  document.getElementById('dm-host').value = dev?.host || '';
+  document.getElementById('dm-port').value = dev?.port || '';
+  document.getElementById('dm-user').value = dev?.username || '';
+  document.getElementById('dm-secret').value = '';
+  document.getElementById('dm-secret').placeholder = dev?.has_secret ? '•••••• (unchanged)' : 'password / SNMP community';
+  document.getElementById('dm-base').value = dev?.base_path || '';
+  document.getElementById('dm-interval').value = dev?.poll_interval_sec || 0;
+  document.getElementById('dm-delete').style.display = dev ? '' : 'none';
+  updateDeviceModalFields();
+  document.getElementById('device-modal-bg').style.display = 'flex';
+}
+function closeDeviceModal() { document.getElementById('device-modal-bg').style.display = 'none'; }
+
+// Hide host/credential fields for the simulator (it needs none).
+function updateDeviceModalFields() {
+  const isSim = document.getElementById('dm-vendor').value === 'simulator';
+  document.getElementById('dm-conn-fields').style.display = isSim ? 'none' : '';
+}
+
+async function saveDevice() {
+  const id = document.getElementById('device-modal-id').value;
+  const body = {
+    equipment_id: parseInt(document.getElementById('device-modal-eq').value, 10),
+    name: document.getElementById('dm-name').value.trim(),
+    vendor: document.getElementById('dm-vendor').value,
+    host: document.getElementById('dm-host').value.trim() || null,
+    port: parseInt(document.getElementById('dm-port').value, 10) || null,
+    username: document.getElementById('dm-user').value.trim() || null,
+    base_path: document.getElementById('dm-base').value.trim() || null,
+    poll_interval_sec: parseInt(document.getElementById('dm-interval').value, 10) || 0,
+  };
+  const secret = document.getElementById('dm-secret').value;
+  if (secret) body.secret = secret;
+  try {
+    const dev = id
+      ? await apiFetch('PUT', '/api/devices/' + id, body)
+      : await apiFetch('POST', '/api/devices', body);
+    monitoredDevices = monitoredDevices.filter(d => d.id !== dev.id && d.equipment_id !== body.equipment_id);
+    monitoredDevices.push(dev);
+    closeDeviceModal();
+    renderEquipment();
+  } catch (e) { alert('Failed: ' + (e.message || e)); }
+}
+
+async function deleteDevice() {
+  const id = document.getElementById('device-modal-id').value;
+  if (!id || !confirm('Delete this monitor? Stored measurements will also be removed.')) return;
+  try {
+    await apiFetch('DELETE', '/api/devices/' + id);
+    monitoredDevices = monitoredDevices.filter(d => d.id !== parseInt(id, 10));
+    closeDeviceModal();
+    renderEquipment();
+  } catch (e) { alert('Failed: ' + (e.message || e)); }
+}
+
+async function pollDevice(deviceId) {
+  try {
+    const res = await apiFetch('POST', '/api/devices/' + deviceId + '/poll', {});
+    const idx = monitoredDevices.findIndex(d => d.id === deviceId);
+    if (idx >= 0 && res.device) monitoredDevices[idx] = res.device;
+    // refresh latest levels
+    opticalLevels = await apiFetch('GET', '/api/sites/' + siteId + '/optical');
+    renderEquipment();
+    if (!res.ok) alert('Poll failed: ' + (res.error || 'unknown error'));
+  } catch (e) { alert('Poll failed: ' + (e.message || e)); }
 }
 
 function toggleAddPortForm(equipId) {
