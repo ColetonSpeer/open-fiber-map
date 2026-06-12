@@ -165,7 +165,7 @@ rsync -a --exclude='backend/.env' --exclude='backend/node_modules' --exclude='.g
 section "Writing configuration"
 SESSION_SECRET="$(openssl rand -hex 32)"
 cat > "$INSTALL_DIR/backend/.env" <<EOF
-DB_HOST=localhost
+DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_NAME=$DB_NAME
 DB_USER=$DB_USER

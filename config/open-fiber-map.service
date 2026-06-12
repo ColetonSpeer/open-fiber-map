@@ -6,6 +6,7 @@ After=network.target postgresql.service
 Type=simple
 User=www-data
 WorkingDirectory=INSTALL_DIR/backend
+EnvironmentFile=INSTALL_DIR/backend/.env
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
