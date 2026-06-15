@@ -1372,13 +1372,19 @@ async function exportKMZ() {
     const xe = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const photoDefs = state.fieldDefs.filter(d => d.field_type === 'photo');
 
-    // Fetch field values for all poles and closures in parallel
-    const [poleVals, closureVals] = await Promise.all([
+    // Fetch field values and entity photos for all poles and closures in parallel
+    const [poleVals, closureVals, polePhotos, closurePhotos] = await Promise.all([
       Promise.all(state.poles.map(p =>
         api('GET', `/field-values/pole/${p.id}`).catch(() => [])
       )),
       Promise.all(state.closures.map(c =>
         api('GET', `/field-values/closure/${c.id}`).catch(() => [])
+      )),
+      Promise.all(state.poles.map(p =>
+        api('GET', `/photos/pole/${p.id}`).catch(() => [])
+      )),
+      Promise.all(state.closures.map(c =>
+        api('GET', `/photos/closure/${c.id}`).catch(() => [])
       )),
     ]);
 
@@ -1405,16 +1411,25 @@ async function exportKMZ() {
       return html ? `<description><![CDATA[${html}]]></description>` : '';
     }
 
-    // Gather all photo blobs first
+    // Gather all photo blobs first (custom field photos + entity photos)
     const allFvFlat = [...poleVals.flat(), ...closureVals.flat()];
-    await Promise.all(allFvFlat.filter(fv => fv.field_type === 'photo' && fv.value).map(fv => gatherPhoto(fv.value)));
+    const allEntityPhotos = [...polePhotos.flat(), ...closurePhotos.flat()];
+    await Promise.all([
+      ...allFvFlat.filter(fv => fv.field_type === 'photo' && fv.value).map(fv => gatherPhoto(fv.value)),
+      ...allEntityPhotos.filter(p => p.url).map(p => gatherPhoto(p.url)),
+    ]);
+
+    function buildEntityPhotoDesc(photos) {
+      if (!photos || !photos.length) return '';
+      return photos.map(p => `<img src="files/${p.url.split('/').pop()}" width="400"><br>`).join('');
+    }
 
     // Build KML
     let polePlacemarks = state.poles.map((p, i) => {
       const coords = Array.isArray(p.geom?.coordinates) ? p.geom.coordinates : [0,0];
       const fvs = poleVals[i] || [];
       const notes = p.notes ? `<b>Notes:</b> ${xe(p.notes)}<br>` : '';
-      const fields = buildFieldDesc(fvs);
+      const fields = buildFieldDesc(fvs) + buildEntityPhotoDesc(polePhotos[i]);
       return `<Placemark><name>${xe(p.name)}</name><styleUrl>#pole</styleUrl>${xmlCdata(notes + fields)}<Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
     }).join('\n');
 
@@ -1422,7 +1437,7 @@ async function exportKMZ() {
       const coords = Array.isArray(c.geom?.coordinates) ? c.geom.coordinates : [0,0];
       const fvs = closureVals[i] || [];
       const notes = c.notes ? `<b>Notes:</b> ${xe(c.notes)}<br>` : '';
-      const fields = buildFieldDesc(fvs);
+      const fields = buildFieldDesc(fvs) + buildEntityPhotoDesc(closurePhotos[i]);
       return `<Placemark><name>${xe(c.name)}</name><styleUrl>#closure</styleUrl>${xmlCdata(notes + fields)}<Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
     }).join('\n');
 
@@ -1683,14 +1698,9 @@ function showImportConfigModal(parsed, filename) {
         ${(() => {
           const hasPhotos = _importZip && [...points, ...lines].some(f => f.photoSrc);
           if (!hasPhotos) return '';
-          const photoDefs = state.fieldDefs.filter(d => d.field_type === 'photo' && (d.entity_type === 'pole' || d.entity_type === 'closure'));
-          if (!photoDefs.length) return `<p style="font-size:12px;color:#e65100;margin:0 0 10px;">📷 ${[...points,...lines].filter(f=>f.photoSrc).length} embedded photo(s) found — create a Photo custom field for Pole or Closure in Admin to import them.</p>`;
-          const opts = photoDefs.map(d => `<option value="${d.id}">${h(d.field_label)} (${d.entity_type})</option>`).join('');
+          const photoCount = [...points, ...lines].filter(f => f.photoSrc).length;
           return `<div style="margin-bottom:12px;padding:8px 10px;background:#e8f5e9;border-radius:6px;font-size:13px;">
-            📷 ${[...points,...lines].filter(f=>f.photoSrc).length} embedded photo(s) found — save to:
-            <select id="imp-photo-field" style="margin-left:6px;padding:2px 6px;border:1px solid #ccc;border-radius:4px;">
-              <option value="">— skip photos —</option>${opts}
-            </select>
+            📷 ${photoCount} embedded photo(s) found — will be attached to each feature automatically.
           </div>`;
         })()}
 
@@ -1726,9 +1736,6 @@ async function startImport(btn) {
     if (sel.dataset.scope === 'pt') ptMapping[sel.dataset.field] = sel.value;
     else                            lnMapping[sel.dataset.field] = sel.value;
   });
-  const photoFieldId = modal.querySelector('#imp-photo-field')?.value || '';
-  const photoFieldDef = photoFieldId ? state.fieldDefs.find(d => d.id === parseInt(photoFieldId)) : null;
-
   const toImport = [
     ...(ptType !== 'skip' ? parsed.points.map(p => ({ ...p, _type: ptType })) : []),
     ...(lnType !== 'skip' ? parsed.lines.map(l => ({ ...l, _type: 'route'  })) : []),
@@ -1762,21 +1769,24 @@ async function startImport(btn) {
   }
 
   async function attachImportPhoto(entityType, entityId, photoSrc) {
-    if (!photoFieldDef || !photoSrc) return;
-    if (photoFieldDef.entity_type !== entityType) return;
+    if (!photoSrc) return;
     try {
-      let url;
       if (/^https?:\/\//i.test(photoSrc)) {
-        // External URL (e.g. Google My Maps hosted image) — proxy through server
+        // External URL (e.g. Google My Maps hosted image) — proxy through server then save to entity_photos
         const res = await fetch('/api/uploads/proxy', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: photoSrc }),
         });
         if (!res.ok) { console.warn('[KMZ import] proxy failed, status:', res.status, await res.text()); return; }
-        ({ url } = await res.json());
+        const { url } = await res.json();
+        await fetch(`/api/photos/${entityType}/${entityId}/url`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
       } else {
-        // Embedded file in ZIP
+        // Embedded file in ZIP — upload directly to entity_photos
         if (!_importZip) return;
         const base = photoSrc.split('/').pop();
         let entry = _importZip.files[photoSrc]
@@ -1796,12 +1806,11 @@ async function startImport(btn) {
         const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
         const fd = new FormData();
         fd.append('file', new File([blob], base, { type: mimeMap[ext] || 'image/jpeg' }));
-        const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+        const res = await fetch(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd, credentials: 'include' });
         if (!res.ok) { console.warn('[KMZ import] upload failed, status:', res.status); return; }
-        ({ url } = await res.json());
+        const photo = await res.json();
+        console.log('[KMZ import] photo saved:', photo.url, '->', entityType, entityId);
       }
-      await api('PUT', `/field-values/${entityType}/${entityId}`, { values: { [photoFieldDef.id]: url } });
-      console.log('[KMZ import] photo saved:', url, '->', entityType, entityId);
     } catch (e) { console.warn('[KMZ import] photo import failed for', photoSrc, e); }
   }
 
@@ -2442,11 +2451,45 @@ async function uploadPhoto(input, defId) {
   } catch (e) { alert('Photo upload failed'); }
 }
 
+function entityPhotoThumbHtml(p) {
+  return `<div id="ephoto-${p.id}" style="position:relative;display:inline-block;">
+    <a href="${h(p.url)}" target="_blank"><img src="${h(p.url)}" title="${h(p.caption||'')}" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;cursor:pointer;"></a>
+    <button onclick="entityPhotoDelete(${p.id})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:18px;padding:0;text-align:center;">×</button>
+  </div>`;
+}
+
+async function entityPhotoDelete(photoId) {
+  if (!confirm('Delete this photo?')) return;
+  try {
+    await api('DELETE', '/photos/' + photoId);
+    const el = document.getElementById('ephoto-' + photoId);
+    if (el) el.remove();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+async function entityPhotoUpload(input, entityType, entityId) {
+  const grid = document.getElementById('entity-photo-grid');
+  for (const file of [...input.files]) {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd, credentials: 'include' });
+      if (!res.ok) throw new Error(await res.text());
+      const photo = await res.json();
+      if (grid) grid.insertAdjacentHTML('beforeend', entityPhotoThumbHtml(photo));
+    } catch (e) { console.warn('Photo upload failed:', e); }
+  }
+  input.value = '';
+}
+
 // ============ EDIT MODAL ============
 async function openEditModal(entityType, entityId, obj) {
   if (!obj) return;
   const defs = state.fieldDefs.filter(d => d.entity_type === entityType);
-  const rawValues = defs.length ? await api('GET', `/field-values/${entityType}/${entityId}`) : [];
+  const [rawValues, entityPhotos] = await Promise.all([
+    defs.length ? api('GET', `/field-values/${entityType}/${entityId}`) : Promise.resolve([]),
+    (entityType === 'pole' || entityType === 'closure') ? api('GET', `/photos/${entityType}/${entityId}`).catch(() => []) : Promise.resolve([]),
+  ]);
   const valMap = {};
   rawValues.forEach(v => { valMap[v.field_def_id] = v.value; });
 
@@ -2487,8 +2530,18 @@ async function openEditModal(entityType, entityId, obj) {
     }
   });
 
+  let photoGalleryHtml = '';
+  if (entityType === 'pole' || entityType === 'closure') {
+    const thumbs = entityPhotos.map(p => entityPhotoThumbHtml(p)).join('');
+    photoGalleryHtml = `<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">
+      <label style="font-weight:600;display:block;margin-bottom:6px;">Photos</label>
+      <div id="entity-photo-grid" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${thumbs}</div>
+      <input type="file" accept="image/*" multiple style="font-size:12px;" onchange="entityPhotoUpload(this,'${entityType}','${entityId}')">
+    </div>`;
+  }
+
   showModal(`Edit ${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`,
-    standardFields + (customHtml ? `<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">${customHtml}</div>` : ''),
+    standardFields + (customHtml ? `<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">${customHtml}</div>` : '') + photoGalleryHtml,
     async () => {
       const name = document.getElementById('ef-name').value.trim();
       if (!name) return false;
@@ -2527,7 +2580,10 @@ async function openEditModal(entityType, entityId, obj) {
 async function openViewModal(entityType, entityId, obj) {
   if (!obj) return;
   const defs = state.fieldDefs.filter(d => d.entity_type === entityType);
-  const rawValues = defs.length ? await api('GET', `/field-values/${entityType}/${entityId}`) : [];
+  const [rawValues, entityPhotos] = await Promise.all([
+    defs.length ? api('GET', `/field-values/${entityType}/${entityId}`) : Promise.resolve([]),
+    (entityType === 'pole' || entityType === 'closure') ? api('GET', `/photos/${entityType}/${entityId}`).catch(() => []) : Promise.resolve([]),
+  ]);
   const valMap = {};
   rawValues.forEach(v => { valMap[v.field_def_id] = v.value; });
 
@@ -2550,6 +2606,11 @@ async function openViewModal(entityType, entityId, obj) {
       rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? h(val) : '<em style="color:#999">—</em>'}</span></div>`;
     }
   });
+
+  if (entityPhotos.length) {
+    const thumbs = entityPhotos.map(p => `<a href="${h(p.url)}" target="_blank"><img src="${h(p.url)}" title="${h(p.caption||'')}" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;"></a>`).join('');
+    rows += `<div class="view-row"><span class="view-label">Photos</span><span><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${thumbs}</div></span></div>`;
+  }
 
   const bg = document.createElement('div');
   bg.className = 'modal-bg';
@@ -2943,16 +3004,18 @@ async function openClosurePanel(closureId) {
   const closure = state.closures.find(c => c.id === closureId);
   if (!closure) return;
   // Load cables and splices
-  const [cables, splices, fieldValues, splitters] = await Promise.all([
+  const [cables, splices, fieldValues, splitters, entityPhotos] = await Promise.all([
     api('GET', `/closures/${closureId}/cables`),
     api('GET', `/closures/${closureId}/splices`),
     api('GET', `/field-values/closure/${closureId}`),
     api('GET', `/closures/${closureId}/splitters`),
+    api('GET', `/photos/closure/${closureId}`).catch(() => []),
   ]);
   closure.cables = cables;
   closure.splices = splices;
   closure.fieldValues = fieldValues;
   closure.splitters = splitters;
+  closure.entityPhotos = entityPhotos;
   // Pre-load sibling closures' cables so the Add Cable picker can filter them out
   if (closure.pole_id) {
     const siblings = state.closures.filter(cl => cl.pole_id === closure.pole_id && cl.id !== closureId);
@@ -3006,6 +3069,12 @@ function renderPanel() {
                 : h(fv.value);
               mf += `<div class="panel-meta-field"><span class="panel-meta-label">${h(fv.field_label)}</span>${display}</div>`;
             }
+          }
+          if (c.entityPhotos && c.entityPhotos.length) {
+            const thumbs = c.entityPhotos.map(p =>
+              `<a href="${h(p.url)}" target="_blank"><img src="${h(p.url)}" style="width:60px;height:45px;object-fit:cover;border-radius:3px;border:1px solid #ddd;vertical-align:middle;"></a>`
+            ).join('');
+            mf += `<div class="panel-meta-field"><span class="panel-meta-label">Photos</span><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;">${thumbs}</div></div>`;
           }
           return mf ? `<div class="panel-meta-fields">${mf}</div>` : '';
         })()}

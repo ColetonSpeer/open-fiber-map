@@ -634,6 +634,56 @@ app.post('/api/uploads/proxy', requireAuth, async (req, res) => {
   }
 });
 
+// ── Entity photos (multi-photo per pole/closure/site/equipment) ───────────────
+
+app.get('/api/photos/:entityType/:entityId', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id, url, caption, created_at FROM entity_photos WHERE entity_type=$1 AND entity_id=$2 ORDER BY created_at',
+      [req.params.entityType, parseInt(req.params.entityId)]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/photos/:entityType/:entityId', requireAuth, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+  try {
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+    const dest = req.file.path + ext;
+    fs.renameSync(req.file.path, dest);
+    const url = '/uploads/' + path.basename(dest);
+    const caption = req.body.caption || null;
+    const r = await pool.query(
+      'INSERT INTO entity_photos (entity_type, entity_id, url, caption) VALUES ($1,$2,$3,$4) RETURNING id, url, caption, created_at',
+      [req.params.entityType, parseInt(req.params.entityId), url, caption]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/photos/:entityType/:entityId/url', requireAuth, async (req, res) => {
+  try {
+    const { url, caption } = req.body;
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    const r = await pool.query(
+      'INSERT INTO entity_photos (entity_type, entity_id, url, caption) VALUES ($1,$2,$3,$4) RETURNING id, url, caption, created_at',
+      [req.params.entityType, parseInt(req.params.entityId), url, caption || null]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/photos/:id', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM entity_photos WHERE id=$1 RETURNING url', [parseInt(req.params.id)]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    const filePath = path.join(uploadsDir, path.basename(r.rows[0].url));
+    try { fs.unlinkSync(filePath); } catch (_) {}
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
 app.get('/api/connector-types', requireAuth, async (req, res) => {
   try {
     const r = await pool.query('SELECT name, enabled FROM connector_types ORDER BY sort_order');
@@ -2341,6 +2391,15 @@ async function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_optical_device_time ON optical_measurements (device_id, measured_at DESC);
     CREATE INDEX IF NOT EXISTS idx_optical_port_time ON optical_measurements (port_id, measured_at DESC);
+    CREATE TABLE IF NOT EXISTS entity_photos (
+      id serial PRIMARY KEY,
+      entity_type varchar(20) NOT NULL,
+      entity_id integer NOT NULL,
+      url text NOT NULL,
+      caption varchar(255),
+      created_at timestamptz DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_entity_photos ON entity_photos (entity_type, entity_id);
     INSERT INTO connector_types (name, enabled, sort_order) VALUES
       ('LC/UPC Simplex', true, 1),
       ('LC/UPC Duplex',  true, 2),

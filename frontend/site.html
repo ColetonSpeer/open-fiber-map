@@ -211,6 +211,7 @@
     <label class="modal-label">Notes</label>
     <textarea id="edit-notes" rows="3" class="modal-input" style="resize:vertical;"></textarea>
     <div id="edit-custom-fields"></div>
+    <div id="edit-photo-section"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
       <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveEdit()">Save</button>
@@ -356,6 +357,7 @@
     <label class="modal-label">Notes</label>
     <input id="eq-edit-notes" class="modal-input">
     <div id="eq-edit-custom-fields"></div>
+    <div id="eq-edit-photo-section"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
       <button class="btn btn-secondary" onclick="closeEqEditModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveEqEdit()">Save</button>
@@ -486,6 +488,37 @@ async function uploadPhoto(input, defId) {
   } catch (e) { alert('Photo upload failed'); }
 }
 
+function entityPhotoThumbHtml(p) {
+  return `<div id="ephoto-${p.id}" style="position:relative;display:inline-block;">
+    <a href="${esc(p.url)}" target="_blank"><img src="${esc(p.url)}" title="${esc(p.caption||'')}" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;cursor:pointer;"></a>
+    <button onclick="entityPhotoDelete(${p.id})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:18px;padding:0;text-align:center;">×</button>
+  </div>`;
+}
+
+async function entityPhotoDelete(photoId) {
+  if (!confirm('Delete this photo?')) return;
+  try {
+    await apiFetch('DELETE', '/api/photos/' + photoId);
+    const el = document.getElementById('ephoto-' + photoId);
+    if (el) el.remove();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+async function entityPhotoUpload(input, entityType, entityId) {
+  const grid = document.getElementById('entity-photo-grid');
+  for (const file of [...input.files]) {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd, credentials: 'include' });
+      if (!res.ok) throw new Error(await res.text());
+      const photo = await res.json();
+      if (grid) grid.insertAdjacentHTML('beforeend', entityPhotoThumbHtml(photo));
+    } catch (e) { console.warn('Photo upload failed:', e); }
+  }
+  input.value = '';
+}
+
 async function init() {
   if (!siteId) { showError(); return; }
   try {
@@ -557,7 +590,19 @@ function render() {
       <span class="info-value">${display}</span>
     </div>`;
   });
+  rows += `<div class="info-row"><span class="info-label">Photos</span><span class="info-value" id="site-photo-display"><em style="color:#aaa">Loading…</em></span></div>`;
   document.getElementById('info-rows').innerHTML = rows;
+  // Load entity photos asynchronously
+  apiFetch('GET', '/api/photos/site/' + siteId).then(photos => {
+    const el = document.getElementById('site-photo-display');
+    if (!el) return;
+    if (!photos.length) { el.innerHTML = '<em style="color:#aaa">—</em>'; return; }
+    const thumbs = photos.map(p => `<a href="${esc(p.url)}" target="_blank"><img src="${esc(p.url)}" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;margin:2px;"></a>`).join('');
+    el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:4px;">${thumbs}</div>`;
+  }).catch(() => {
+    const el = document.getElementById('site-photo-display');
+    if (el) el.innerHTML = '<em style="color:#aaa">—</em>';
+  });
 }
 
 function renderPatchPanels() {
@@ -904,7 +949,7 @@ function switchTab(tab) {
   document.getElementById('tab-' + tab).style.display = '';
 }
 
-function openEditModal() {
+async function openEditModal() {
   document.getElementById('edit-name').value = site.name;
   document.getElementById('edit-notes').value = site.notes || '';
 
@@ -929,6 +974,17 @@ function openEditModal() {
     customHtml += '</div>';
   }
   document.getElementById('edit-custom-fields').innerHTML = customHtml;
+
+  // Entity photos gallery
+  const photos = await apiFetch('GET', '/api/photos/site/' + siteId).catch(() => []);
+  const thumbs = photos.map(p => entityPhotoThumbHtml(p)).join('');
+  document.getElementById('edit-photo-section').innerHTML = `
+    <div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">
+      <label class="modal-label" style="font-weight:600;">Photos</label>
+      <div id="entity-photo-grid" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${thumbs}</div>
+      <input type="file" accept="image/*" multiple class="modal-input" style="font-size:12px;" onchange="entityPhotoUpload(this,'site','${siteId}')">
+    </div>`;
+
   document.getElementById('edit-modal-bg').style.display = 'flex';
 }
 
@@ -1725,6 +1781,17 @@ async function openEqEditModal(equipId) {
     customHtml += '</div>';
   }
   document.getElementById('eq-edit-custom-fields').innerHTML = customHtml;
+
+  // Entity photos gallery
+  const photos = await apiFetch('GET', '/api/photos/equipment/' + equipId).catch(() => []);
+  const thumbs = photos.map(p => entityPhotoThumbHtml(p)).join('');
+  document.getElementById('eq-edit-photo-section').innerHTML = `
+    <div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px;">
+      <label class="modal-label" style="font-weight:600;">Photos</label>
+      <div id="entity-photo-grid" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${thumbs}</div>
+      <input type="file" accept="image/*" multiple class="modal-input" style="font-size:12px;" onchange="entityPhotoUpload(this,'equipment','${equipId}')">
+    </div>`;
+
   document.getElementById('eq-edit-modal-bg').style.display = 'flex';
 }
 

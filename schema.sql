@@ -877,6 +877,33 @@ ALTER SEQUENCE public.splitters_id_seq OWNED BY public.splitters.id;
 
 
 --
+-- Name: entity_photos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.entity_photos (
+    id integer NOT NULL,
+    entity_type character varying(20) NOT NULL,
+    entity_id integer NOT NULL,
+    url text NOT NULL,
+    caption character varying(255),
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE SEQUENCE public.entity_photos_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.entity_photos_id_seq OWNED BY public.entity_photos.id;
+ALTER TABLE ONLY public.entity_photos ALTER COLUMN id SET DEFAULT nextval('public.entity_photos_id_seq'::regclass);
+ALTER TABLE ONLY public.entity_photos ADD CONSTRAINT entity_photos_pkey PRIMARY KEY (id);
+CREATE INDEX idx_entity_photos ON public.entity_photos USING btree (entity_type, entity_id);
+
+
+--
 -- Name: user_preferences; Type: TABLE; Schema: public; Owner: -
 --
 
