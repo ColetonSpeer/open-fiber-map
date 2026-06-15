@@ -209,6 +209,8 @@ body.dark-mode .sr-empty { color:#6b7280; }
 .import-assign-row    { display:flex; align-items:center; gap:12px; margin:6px 0; font-size:13px; }
 .import-assign-row label { display:flex; align-items:center; gap:4px; cursor:pointer; }
 body.dark-mode .import-progress-wrap { background:#374151; }
+.import-photo-notice { margin-bottom:12px; padding:8px 10px; background:#e8f5e9; color:#1b5e20; border-radius:6px; font-size:13px; }
+body.dark-mode .import-photo-notice { background:#1a3a2a; color:#86efac; }
 </style>
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -1701,9 +1703,7 @@ function showImportConfigModal(parsed, filename) {
           const hasPhotos = _importZip && [...points, ...lines].some(f => f.photoSrcs && f.photoSrcs.length);
           if (!hasPhotos) return '';
           const photoCount = [...points, ...lines].reduce((n, f) => n + (f.photoSrcs ? f.photoSrcs.length : 0), 0);
-          return `<div style="margin-bottom:12px;padding:8px 10px;background:#e8f5e9;border-radius:6px;font-size:13px;color:#1b5e20;">
-            📷 ${photoCount} embedded photo(s) found — will be attached to each feature automatically.
-          </div>`;
+          return `<div class="import-photo-notice">📷 ${photoCount} embedded photo(s) found — will be attached to each feature automatically.</div>`;
         })()}
 
         ${points.length ? buildFieldMappingHTML(parsed, 'pt') : ''}
