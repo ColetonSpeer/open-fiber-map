@@ -260,6 +260,7 @@ body.dark-mode .import-progress-wrap { background:#374151; }
     <button class="tb" id="btn-views" onclick="toggleViewsPanel()">🗂 Views</button>
     <button class="tb" onclick="document.getElementById('kml-import-input').click()">📥 Import</button>
     <input type="file" id="kml-import-input" accept=".kml,.kmz" style="display:none" onchange="onImportFileChosen(this)">
+    <button class="tb" onclick="exportKMZ()">📤 Export KMZ</button>
     <span id="active-layer-label" style="display:none;font-size:11px;padding:3px 8px;background:#1565c0;color:white;border-radius:4px;">Layer: —</span>
     <span id="mode-hint">Click a closure to view splices</span>
   </div>
@@ -532,7 +533,8 @@ let _geoResults  = [];
 let _searchAbort = null;
 let _geoContext  = null;   // { vb: 'west,north,east,south', cc: 'us' } — current admin bounds
 let _geoCtxTimer = null;
-let _pendingImport = null;  // holds { parsed, groupName } while import modal is open
+let _pendingImport = null;  // holds { parsed, groupName, photoFieldId } while import modal is open
+let _importZip = null;      // JSZip instance kept alive for photo extraction during import
 let layerPrefs = { basemap: 'street', showLabels: true, showRoads: true, showHouseNums: false, mapLat: 39.5, mapLng: -98.35, mapZoom: 4, darkMode: false };
 
 function applyLayerPrefs() {
@@ -1342,18 +1344,120 @@ async function onImportFileChosen(input) {
   input.value = '';
   if (!file) return;
   let kmlText;
+  _importZip = null;
   try {
     if (file.name.toLowerCase().endsWith('.kmz')) {
       const zip = await JSZip.loadAsync(file);
       const entry = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.kml'));
       if (!entry) throw new Error('No .kml found inside KMZ');
       kmlText = await zip.files[entry].async('text');
+      _importZip = zip;
     } else {
       kmlText = await file.text();
     }
   } catch (e) { alert('Could not read file: ' + e.message); return; }
   const parsed = parseKMLFeatures(kmlText);
   showImportConfigModal(parsed, file.name);
+}
+
+async function exportKMZ() {
+  const btn = document.querySelector('button.tb[onclick="exportKMZ()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Exporting…'; }
+  try {
+    const xe = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const photoDefs = state.fieldDefs.filter(d => d.field_type === 'photo');
+
+    // Fetch field values for all poles and closures in parallel
+    const [poleVals, closureVals] = await Promise.all([
+      Promise.all(state.poles.map(p =>
+        api('GET', `/field-values/pole/${p.id}`).catch(() => [])
+      )),
+      Promise.all(state.closures.map(c =>
+        api('GET', `/field-values/closure/${c.id}`).catch(() => [])
+      )),
+    ]);
+
+    // Collect photo URLs to embed, keyed by their basename (used as files/ path in KMZ)
+    const photoFiles = new Map(); // basename → blob
+    async function gatherPhoto(url) {
+      if (!url || photoFiles.has(url)) return;
+      try {
+        const r = await fetch(url, { credentials: 'include' });
+        if (r.ok) photoFiles.set(url, await r.blob());
+      } catch (e) { /* skip missing photos */ }
+    }
+
+    function buildFieldDesc(fieldValues) {
+      if (!fieldValues || !fieldValues.length) return '';
+      return fieldValues.map(fv => {
+        if (!fv.value) return '';
+        if (fv.field_type === 'photo') return `<img src="files/${fv.value.split('/').pop()}" width="400"><br>`;
+        return `<b>${xe(fv.field_label)}:</b> ${xe(fv.value)}<br>`;
+      }).join('');
+    }
+
+    function xmlCdata(html) {
+      return html ? `<description><![CDATA[${html}]]></description>` : '';
+    }
+
+    // Gather all photo blobs first
+    const allFvFlat = [...poleVals.flat(), ...closureVals.flat()];
+    await Promise.all(allFvFlat.filter(fv => fv.field_type === 'photo' && fv.value).map(fv => gatherPhoto(fv.value)));
+
+    // Build KML
+    let polePlacemarks = state.poles.map((p, i) => {
+      const coords = Array.isArray(p.geom?.coordinates) ? p.geom.coordinates : [0,0];
+      const fvs = poleVals[i] || [];
+      const notes = p.notes ? `<b>Notes:</b> ${xe(p.notes)}<br>` : '';
+      const fields = buildFieldDesc(fvs);
+      return `<Placemark><name>${xe(p.name)}</name><styleUrl>#pole</styleUrl>${xmlCdata(notes + fields)}<Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
+    }).join('\n');
+
+    let closurePlacemarks = state.closures.map((c, i) => {
+      const coords = Array.isArray(c.geom?.coordinates) ? c.geom.coordinates : [0,0];
+      const fvs = closureVals[i] || [];
+      const notes = c.notes ? `<b>Notes:</b> ${xe(c.notes)}<br>` : '';
+      const fields = buildFieldDesc(fvs);
+      return `<Placemark><name>${xe(c.name)}</name><styleUrl>#closure</styleUrl>${xmlCdata(notes + fields)}<Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
+    }).join('\n');
+
+    let routePlacemarks = state.routes.map(r => {
+      const coords = (r.geom?.coordinates || []).map(([lng,lat]) => `${lng},${lat},0`).join(' ');
+      const notes = r.notes ? `<b>Notes:</b> ${xe(r.notes)}<br><b>Fibers:</b> ${r.fiber_count}` : `<b>Fibers:</b> ${r.fiber_count}`;
+      return `<Placemark><name>${xe(r.name)}</name><styleUrl>#route</styleUrl>${xmlCdata(notes)}<LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString></Placemark>`;
+    }).join('\n');
+
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Open Fiber Map Export</name>
+  <Style id="pole"><IconStyle><color>ff0000ff</color><scale>0.8</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>
+  <Style id="closure"><IconStyle><color>ffff5500</color><scale>0.8</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/square.png</href></Icon></IconStyle></Style>
+  <Style id="route"><LineStyle><color>ff0088ff</color><width>2</width></LineStyle></Style>
+  <Folder><name>Poles</name>${polePlacemarks}</Folder>
+  <Folder><name>Closures</name>${closurePlacemarks}</Folder>
+  <Folder><name>Fiber Routes</name>${routePlacemarks}</Folder>
+</Document>
+</kml>`;
+
+    const zip = new JSZip();
+    zip.file('doc.kml', kml);
+    photoFiles.forEach((blob, url) => {
+      zip.file('files/' + url.split('/').pop(), blob);
+    });
+
+    const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = 'open-fiber-map-export.kmz';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch (e) {
+    alert('Export failed: ' + e.message);
+    console.error(e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Export KMZ'; }
+  }
 }
 
 function parseKMLFeatures(kmlText) {
@@ -1375,12 +1479,16 @@ function parseKMLFeatures(kmlText) {
       const v = d.textContent?.trim() || '';
       if (k) fields[k] = v;
     });
+    // Extract first embedded image src from description (KMZ stores images in files/)
+    const imgMatch = desc.match(/<img[^>]+src=["']([^"']+)["']/i);
+    const photoSrc = imgMatch ? imgMatch[1] : null;
+
     const ptEl = pm.querySelector('Point coordinates');
     if (ptEl) {
       const parts = ptEl.textContent.trim().split(',');
       const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
       if (!isNaN(lat) && !isNaN(lng)) {
-        points.push({ name, desc, fields, lat, lng });
+        points.push({ name, desc, fields, lat, lng, photoSrc });
         Object.keys(fields).forEach(k => ptExtSet.add(k));
       }
       return;
@@ -1392,7 +1500,7 @@ function parseKMLFeatures(kmlText) {
         return [parseFloat(p[0]), parseFloat(p[1])];
       }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
       if (coords.length >= 2) {
-        lines.push({ name, desc, fields, coords });
+        lines.push({ name, desc, fields, coords, photoSrc });
         Object.keys(fields).forEach(k => lnExtSet.add(k));
       }
     });
@@ -1531,6 +1639,20 @@ function showImportConfigModal(parsed, filename) {
 
         ${skippedPolygons ? `<p style="font-size:12px;color:#888;margin:4px 0 10px">ℹ ${skippedPolygons} polygon(s) skipped (not supported)</p>` : ''}
 
+        ${(() => {
+          const hasPhotos = _importZip && [...points, ...lines].some(f => f.photoSrc);
+          if (!hasPhotos) return '';
+          const photoDefs = state.fieldDefs.filter(d => d.field_type === 'photo' && (d.entity_type === 'pole' || d.entity_type === 'closure'));
+          if (!photoDefs.length) return `<p style="font-size:12px;color:#e65100;margin:0 0 10px;">📷 ${[...points,...lines].filter(f=>f.photoSrc).length} embedded photo(s) found — create a Photo custom field for Pole or Closure in Admin to import them.</p>`;
+          const opts = photoDefs.map(d => `<option value="${d.id}">${h(d.field_label)} (${d.entity_type})</option>`).join('');
+          return `<div style="margin-bottom:12px;padding:8px 10px;background:#e8f5e9;border-radius:6px;font-size:13px;">
+            📷 ${[...points,...lines].filter(f=>f.photoSrc).length} embedded photo(s) found — save to:
+            <select id="imp-photo-field" style="margin-left:6px;padding:2px 6px;border:1px solid #ccc;border-radius:4px;">
+              <option value="">— skip photos —</option>${opts}
+            </select>
+          </div>`;
+        })()}
+
         ${points.length ? buildFieldMappingHTML(parsed, 'pt') : ''}
         ${lines.length  ? buildFieldMappingHTML(parsed, 'ln') : ''}
 
@@ -1563,6 +1685,8 @@ async function startImport(btn) {
     if (sel.dataset.scope === 'pt') ptMapping[sel.dataset.field] = sel.value;
     else                            lnMapping[sel.dataset.field] = sel.value;
   });
+  const photoFieldId = modal.querySelector('#imp-photo-field')?.value || '';
+  const photoFieldDef = photoFieldId ? state.fieldDefs.find(d => d.id === parseInt(photoFieldId)) : null;
 
   const toImport = [
     ...(ptType !== 'skip' ? parsed.points.map(p => ({ ...p, _type: ptType })) : []),
@@ -1596,6 +1720,22 @@ async function startImport(btn) {
     return;
   }
 
+  async function attachImportPhoto(entityType, entityId, photoSrc) {
+    if (!photoFieldDef || !photoSrc || !_importZip) return;
+    if (photoFieldDef.entity_type !== entityType) return;
+    const entry = _importZip.files[photoSrc] || _importZip.files['files/' + photoSrc.replace(/^files\//, '')];
+    if (!entry) return;
+    try {
+      const blob = await entry.async('blob');
+      const fname = photoSrc.split('/').pop() || 'photo.jpg';
+      const fd = new FormData();
+      fd.append('file', new File([blob], fname, { type: blob.type || 'image/jpeg' }));
+      const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+      const { url } = await res.json();
+      await api('PUT', `/field-values/${entityType}/${entityId}`, { values: { [photoFieldDef.id]: url } });
+    } catch (e) { console.warn('Photo import failed for', photoSrc, e); }
+  }
+
   let done = 0, errors = 0;
   for (const feat of toImport) {
     const mapped = applyFieldMapping(feat, feat._type === 'route' ? lnMapping : ptMapping);
@@ -1606,12 +1746,14 @@ async function startImport(btn) {
         const p = await api('POST', '/poles', { name, notes: mapped.poleNotes ?? mapped.closureNotes, lat: feat.lat, lng: feat.lng, layer_id: layerId });
         p.geom = typeof p.geom === 'string' ? JSON.parse(p.geom) : p.geom;
         state.poles.push(p);
+        await attachImportPhoto('pole', p.id, feat.photoSrc);
       } else if (feat._type === 'closure') {
         const name = (mapped.closureName ?? mapped.featureName ?? feat.name) || 'Closure';
         const c = await api('POST', '/closures', { name, notes: mapped.closureNotes ?? mapped.poleNotes, lat: feat.lat, lng: feat.lng, layer_id: layerId });
         c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
         if (!c.cables) c.cables = [];
         state.closures.push(c);
+        await attachImportPhoto('closure', c.id, feat.photoSrc);
       } else if (feat._type === 'pole_closure') {
         const pName = mapped.poleName ?? randomPoleName();
         const cName = (mapped.closureName ?? mapped.featureName ?? feat.name) || 'Closure';
@@ -1622,6 +1764,9 @@ async function startImport(btn) {
         c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
         if (!c.cables) c.cables = [];
         state.closures.push(c);
+        // attach photo to whichever entity type the chosen field targets
+        await attachImportPhoto('pole', p.id, feat.photoSrc);
+        await attachImportPhoto('closure', c.id, feat.photoSrc);
       } else if (feat._type === 'route') {
         const name = (mapped.featureName ?? feat.name) || 'Route';
         const r = await api('POST', '/routes', { name, notes: mapped.poleNotes ?? mapped.closureNotes, points: feat.coords, fiber_count: fc, color, attached_poles: [], layer_id: layerId });
@@ -1632,6 +1777,7 @@ async function startImport(btn) {
     done++;
     setProgress(done);
   }
+  _importZip = null;
 
   renderMap();
   renderLayersPanel();
