@@ -608,6 +608,32 @@ app.post('/api/uploads', requireAuth, upload.single('file'), (req, res) => {
   res.json({ url: '/uploads/' + path.basename(dest) });
 });
 
+// Proxy-fetch an external image URL server-side (avoids CORS restrictions)
+app.post('/api/uploads/proxy', requireAuth, async (req, res) => {
+  const { url } = req.body;
+  if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Invalid URL' });
+  try {
+    const proto = url.startsWith('https') ? require('https') : require('http');
+    await new Promise((resolve, reject) => {
+      proto.get(url, (imgRes) => {
+        if (imgRes.statusCode !== 200) { reject(new Error('HTTP ' + imgRes.statusCode)); return; }
+        const ct = imgRes.headers['content-type'] || '';
+        const extMap = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' };
+        const ext = extMap[ct.split(';')[0].trim()] || '.jpg';
+        const filename = crypto.randomBytes(8).toString('hex') + ext;
+        const dest = path.join(uploadsDir, filename);
+        const file = fs.createWriteStream(dest);
+        imgRes.pipe(file);
+        file.on('finish', () => { res.json({ url: '/uploads/' + filename }); resolve(); });
+        file.on('error', reject);
+      }).on('error', reject);
+    });
+  } catch (e) {
+    console.error('Proxy fetch failed:', url, e.message);
+    res.status(500).json({ error: 'Failed to fetch image: ' + e.message });
+  }
+});
+
 app.get('/api/connector-types', requireAuth, async (req, res) => {
   try {
     const r = await pool.query('SELECT name, enabled FROM connector_types ORDER BY sort_order');

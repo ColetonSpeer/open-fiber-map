@@ -1489,8 +1489,8 @@ function parseKMLFeatures(kmlText, zipImageFiles) {
 
     // Photo detection — 4 strategies in priority order
     let photoSrc = null;
-    // 1. <img src> in description HTML (Google Earth, most desktop tools)
-    const imgMatch = desc.match(/<img[^>]+src=["']?([^"'\s>]+\.(?:jpg|jpeg|png|gif|webp))/i);
+    // 1. <img src> in description HTML — matches both local paths and external URLs
+    const imgMatch = desc.match(/<img[^>]+src=["']([^"']+)["']/i);
     if (imgMatch) photoSrc = imgMatch[1];
     // 2. PhotoOverlay <Icon><href>
     if (!photoSrc) {
@@ -1762,33 +1762,44 @@ async function startImport(btn) {
   }
 
   async function attachImportPhoto(entityType, entityId, photoSrc) {
-    if (!photoFieldDef || !photoSrc || !_importZip) return;
+    if (!photoFieldDef || !photoSrc) return;
     if (photoFieldDef.entity_type !== entityType) return;
-    // Try multiple path patterns
-    const base = photoSrc.split('/').pop();
-    let entry = _importZip.files[photoSrc]
-      || _importZip.files['files/' + base]
-      || _importZip.files[base];
-    if (!entry) {
-      // Last resort: case-insensitive basename match
-      const baseLow = base.toLowerCase();
-      const key = Object.keys(_importZip.files).find(k => k.split('/').pop().toLowerCase() === baseLow);
-      if (key) entry = _importZip.files[key];
-    }
-    if (!entry) {
-      console.warn('[KMZ import] image not found in ZIP:', photoSrc, '— available:', Object.keys(_importZip.files));
-      return;
-    }
     try {
-      const blob = await entry.async('blob');
-      const ext = base.toLowerCase().split('.').pop();
-      const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
-      const type = mimeMap[ext] || 'image/jpeg';
-      const fd = new FormData();
-      fd.append('file', new File([blob], base, { type }));
-      const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
-      if (!res.ok) { console.warn('[KMZ import] upload failed, status:', res.status); return; }
-      const { url } = await res.json();
+      let url;
+      if (/^https?:\/\//i.test(photoSrc)) {
+        // External URL (e.g. Google My Maps hosted image) — proxy through server
+        const res = await fetch('/api/uploads/proxy', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: photoSrc }),
+        });
+        if (!res.ok) { console.warn('[KMZ import] proxy failed, status:', res.status, await res.text()); return; }
+        ({ url } = await res.json());
+      } else {
+        // Embedded file in ZIP
+        if (!_importZip) return;
+        const base = photoSrc.split('/').pop();
+        let entry = _importZip.files[photoSrc]
+          || _importZip.files['files/' + base]
+          || _importZip.files[base];
+        if (!entry) {
+          const baseLow = base.toLowerCase();
+          const key = Object.keys(_importZip.files).find(k => k.split('/').pop().toLowerCase() === baseLow);
+          if (key) entry = _importZip.files[key];
+        }
+        if (!entry) {
+          console.warn('[KMZ import] image not found in ZIP:', photoSrc, '— available:', Object.keys(_importZip.files));
+          return;
+        }
+        const blob = await entry.async('blob');
+        const ext = base.toLowerCase().split('.').pop();
+        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
+        const fd = new FormData();
+        fd.append('file', new File([blob], base, { type: mimeMap[ext] || 'image/jpeg' }));
+        const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+        if (!res.ok) { console.warn('[KMZ import] upload failed, status:', res.status); return; }
+        ({ url } = await res.json());
+      }
       await api('PUT', `/field-values/${entityType}/${entityId}`, { values: { [photoFieldDef.id]: url } });
       console.log('[KMZ import] photo saved:', url, '->', entityType, entityId);
     } catch (e) { console.warn('[KMZ import] photo import failed for', photoSrc, e); }
