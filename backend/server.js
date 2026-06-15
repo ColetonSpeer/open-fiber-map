@@ -124,6 +124,35 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ── Plan-only ('planner') role enforcement ───────────────────────────────────
+// Planners may read everything (for reference) but only mutate plan poles/routes
+// and the handful of endpoints needed to do so (photos, uploads, import layers,
+// custom field values on poles/routes). All other writes are rejected.
+const PLANNER_WRITE_WHITELIST = [
+  /^\/api\/poles(\/\d+)?$/, /^\/api\/routes(\/\d+)?$/,
+  /^\/api\/poles\/\d+\/promote$/, /^\/api\/routes\/\d+\/promote$/,
+  /^\/api\/photos\//, /^\/api\/uploads(\/proxy)?$/,
+  /^\/api\/layer-groups$/, /^\/api\/layer-groups\/\d+\/layers$/,
+  /^\/api\/field-values\/(pole|route)\//,
+  /^\/api\/preferences$/,   // per-user map view prefs (basemap, zoom, dark mode)
+];
+function plannerGate(req, res, next) {
+  if (req.session.role !== 'planner') return next();
+  if (req.method === 'GET') return next();
+  if (req.path === '/api/logout' || req.path === '/api/login') return next();
+  if (PLANNER_WRITE_WHITELIST.some(re => re.test(req.path))) return next();
+  return res.status(403).json({ error: 'Plan-only account: not permitted' });
+}
+app.use(plannerGate);
+
+// Returns false if a planner is trying to mutate a non-plan (live) row.
+async function assertPlanEditable(req, table, id) {
+  if (req.session.role !== 'planner') return true;
+  const safe = table === 'poles' ? 'poles' : 'routes';
+  const r = await pool.query(`SELECT is_plan FROM ${safe} WHERE id=$1`, [id]);
+  return r.rows[0]?.is_plan === true;
+}
+
 // ============ AUTH ENDPOINTS ============
 
 app.post('/api/login', async (req, res) => {
@@ -243,7 +272,7 @@ app.delete('/api/closures/:id', requireAuth, async (req, res) => {
 app.get('/api/poles', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, name, notes, layer_id, ST_AsGeoJSON(geom) as geom
+      SELECT id, name, notes, layer_id, is_plan, ST_AsGeoJSON(geom) as geom
       FROM poles ORDER BY id
     `);
     res.json(result.rows.map(r => ({ ...r, geom: JSON.parse(r.geom) })));
@@ -256,11 +285,12 @@ app.post('/api/poles', requireAuth, async (req, res) => {
   try {
     const { name, notes, lat, lng, layer_id } = req.body;
     const layerId = layer_id || (await getDefaultLayerId());
+    const isPlan = req.session.role === 'planner' ? true : !!req.body.is_plan;
     const result = await pool.query(`
-      INSERT INTO poles (name, notes, geom, created_by, layer_id)
-      VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6)
-      RETURNING id, name, notes, layer_id, ST_AsGeoJSON(geom) as geom
-    `, [name, notes || null, lng, lat, req.session.userId, layerId || null]);
+      INSERT INTO poles (name, notes, geom, created_by, layer_id, is_plan)
+      VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7)
+      RETURNING id, name, notes, layer_id, is_plan, ST_AsGeoJSON(geom) as geom
+    `, [name, notes || null, lng, lat, req.session.userId, layerId || null, isPlan]);
     const row = result.rows[0];
     res.json({ ...row, geom: JSON.parse(row.geom) });
   } catch (err) {
@@ -270,13 +300,15 @@ app.post('/api/poles', requireAuth, async (req, res) => {
 
 app.put('/api/poles/:id', requireAuth, async (req, res) => {
   try {
+    if (!(await assertPlanEditable(req, 'poles', req.params.id)))
+      return res.status(403).json({ error: 'Plan-only account: cannot edit live objects' });
     const { name, notes, lat, lng } = req.body;
     let query, params;
     if (lat !== undefined && lng !== undefined) {
-      query = 'UPDATE poles SET name=$1, notes=$2, geom=ST_SetSRID(ST_MakePoint($3,$4),4326) WHERE id=$5 RETURNING id, name, notes, layer_id, ST_AsGeoJSON(geom) as geom';
+      query = 'UPDATE poles SET name=$1, notes=$2, geom=ST_SetSRID(ST_MakePoint($3,$4),4326) WHERE id=$5 RETURNING id, name, notes, layer_id, is_plan, ST_AsGeoJSON(geom) as geom';
       params = [name, notes || null, lng, lat, req.params.id];
     } else {
-      query = 'UPDATE poles SET name=$1, notes=$2 WHERE id=$3 RETURNING id, name, notes, layer_id, ST_AsGeoJSON(geom) as geom';
+      query = 'UPDATE poles SET name=$1, notes=$2 WHERE id=$3 RETURNING id, name, notes, layer_id, is_plan, ST_AsGeoJSON(geom) as geom';
       params = [name, notes || null, req.params.id];
     }
     const result = await pool.query(query, params);
@@ -288,6 +320,8 @@ app.put('/api/poles/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/poles/:id', requireAuth, async (req, res) => {
   try {
+    if (!(await assertPlanEditable(req, 'poles', req.params.id)))
+      return res.status(403).json({ error: 'Plan-only account: cannot delete live objects' });
     await pool.query('DELETE FROM poles WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
@@ -300,7 +334,8 @@ app.delete('/api/poles/:id', requireAuth, async (req, res) => {
 app.get('/api/routes', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, ST_AsGeoJSON(geom) as geom
+      SELECT id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan,
+             ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom
       FROM routes ORDER BY id
     `);
     res.json(result.rows.map(r => ({ ...r, geom: JSON.parse(r.geom) })));
@@ -313,12 +348,14 @@ app.post('/api/routes', requireAuth, async (req, res) => {
   try {
     const { name, notes, points, fiber_count, color, attached_poles, attached_sites, layer_id } = req.body;
     const layerId = layer_id || (await getDefaultLayerId());
+    const isPlan = req.session.role === 'planner' ? true : !!req.body.is_plan;
     const wkt = `LINESTRING(${points.map(p => `${p[0]} ${p[1]}`).join(',')})`;
     const result = await pool.query(`
-      INSERT INTO routes (name, notes, geom, created_by, fiber_count, color, attached_poles, attached_sites, layer_id)
-      VALUES ($1, $2, ST_GeomFromText($3, 4326), $4, $5, $6, $7, $8, $9)
-      RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, ST_AsGeoJSON(geom) as geom
-    `, [name, notes || null, wkt, req.session.userId, fiber_count || 12, color || '#FF8800', attached_poles || [], attached_sites || [], layerId || null]);
+      INSERT INTO routes (name, notes, geom, created_by, fiber_count, color, attached_poles, attached_sites, layer_id, is_plan)
+      VALUES ($1, $2, ST_GeomFromText($3, 4326), $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan,
+                ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom
+    `, [name, notes || null, wkt, req.session.userId, fiber_count || 12, color || '#FF8800', attached_poles || [], attached_sites || [], layerId || null, isPlan]);
     const row = result.rows[0];
     res.json({ ...row, geom: JSON.parse(row.geom) });
   } catch (err) {
@@ -329,14 +366,16 @@ app.post('/api/routes', requireAuth, async (req, res) => {
 
 app.put('/api/routes/:id', requireAuth, async (req, res) => {
   try {
+    if (!(await assertPlanEditable(req, 'routes', req.params.id)))
+      return res.status(403).json({ error: 'Plan-only account: cannot edit live objects' });
     const { name, notes, fiber_count, color, attached_poles, points } = req.body;
     let query, params;
     if (points && points.length >= 2) {
       const wkt = `LINESTRING(${points.map(p => `${p[0]} ${p[1]}`).join(',')})`;
-      query = `UPDATE routes SET name=$1, notes=$2, fiber_count=$3, color=$4, attached_poles=$5, geom=ST_GeomFromText($6,4326) WHERE id=$7 RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, ST_AsGeoJSON(geom) as geom`;
+      query = `UPDATE routes SET name=$1, notes=$2, fiber_count=$3, color=$4, attached_poles=$5, geom=ST_GeomFromText($6,4326) WHERE id=$7 RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan, ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom`;
       params = [name, notes || null, fiber_count || 12, color || '#FF8800', attached_poles || [], wkt, req.params.id];
     } else {
-      query = `UPDATE routes SET name=$1, notes=$2, fiber_count=$3, color=$4, attached_poles=$5 WHERE id=$6 RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, ST_AsGeoJSON(geom) as geom`;
+      query = `UPDATE routes SET name=$1, notes=$2, fiber_count=$3, color=$4, attached_poles=$5 WHERE id=$6 RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan, ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom`;
       params = [name, notes || null, fiber_count || 12, color || '#FF8800', attached_poles || [], req.params.id];
     }
     const result = await pool.query(query, params);
@@ -351,6 +390,8 @@ app.put('/api/routes/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/routes/:id', requireAuth, async (req, res) => {
   try {
+    if (!(await assertPlanEditable(req, 'routes', req.params.id)))
+      return res.status(403).json({ error: 'Plan-only account: cannot delete live objects' });
     await pool.query('DELETE FROM cables WHERE route_id = $1', [req.params.id]);
     await pool.query('DELETE FROM routes WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -358,6 +399,35 @@ app.delete('/api/routes/:id', requireAuth, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// ── Promote plan → live (admin / regular users only; planners cannot promote) ──
+app.post('/api/poles/:id/promote', requireAuth, async (req, res) => {
+  try {
+    if (req.session.role === 'planner') return res.status(403).json({ error: 'Plan-only account cannot promote' });
+    const result = await pool.query(
+      'UPDATE poles SET is_plan=false WHERE id=$1 RETURNING id, name, notes, layer_id, is_plan, ST_AsGeoJSON(geom) as geom',
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    const row = result.rows[0];
+    res.json({ ...row, geom: JSON.parse(row.geom) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/routes/:id/promote', requireAuth, async (req, res) => {
+  try {
+    if (req.session.role === 'planner') return res.status(403).json({ error: 'Plan-only account cannot promote' });
+    const result = await pool.query(
+      `UPDATE routes SET is_plan=false WHERE id=$1
+       RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan,
+                 ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom`,
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    const row = result.rows[0];
+    res.json({ ...row, geom: JSON.parse(row.geom) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ============ CABLES ============
@@ -2400,6 +2470,10 @@ async function ensureSchema() {
       created_at timestamptz DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_entity_photos ON entity_photos (entity_type, entity_id);
+    ALTER TABLE poles  ADD COLUMN IF NOT EXISTS is_plan boolean DEFAULT false;
+    ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_plan boolean DEFAULT false;
+    CREATE INDEX IF NOT EXISTS idx_poles_is_plan  ON poles(is_plan);
+    CREATE INDEX IF NOT EXISTS idx_routes_is_plan ON routes(is_plan);
     INSERT INTO connector_types (name, enabled, sort_order) VALUES
       ('LC/UPC Simplex', true, 1),
       ('LC/UPC Duplex',  true, 2),

@@ -656,7 +656,8 @@ CREATE TABLE public.poles (
     geom public.geometry(Point,4326) NOT NULL,
     created_by integer,
     created_at timestamp without time zone DEFAULT now(),
-    layer_id integer
+    layer_id integer,
+    is_plan boolean DEFAULT false
 );
 
 
@@ -695,7 +696,8 @@ CREATE TABLE public.routes (
     attached_poles integer[] DEFAULT '{}'::integer[],
     fiber_count integer DEFAULT 12 NOT NULL,
     attached_sites integer[] DEFAULT '{}'::integer[],
-    layer_id integer
+    layer_id integer,
+    is_plan boolean DEFAULT false
 );
 
 
