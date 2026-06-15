@@ -1502,38 +1502,40 @@ function parseKMLFeatures(kmlText, zipImageFiles) {
       if (k) fields[k] = v;
     });
 
-    // Photo detection — 4 strategies in priority order
-    let photoSrc = null;
-    // 1. <img src> in description HTML — matches both local paths and external URLs
-    const imgMatch = desc.match(/<img[^>]+src=["']([^"']+)["']/i);
-    if (imgMatch) photoSrc = imgMatch[1];
+    // Photo detection — collect ALL photo sources per feature (array, not single)
+    const photoSrcs = [];
+    // 1. All <img src> in description HTML — collect all, not just first
+    const imgMatches = [...desc.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)];
+    imgMatches.forEach(m => { if (m[1] && !photoSrcs.includes(m[1])) photoSrcs.push(m[1]); });
     // 2. PhotoOverlay <Icon><href>
-    if (!photoSrc) {
+    if (!photoSrcs.length) {
       const href = pm.querySelector('Icon href')?.textContent?.trim();
-      if (href && imgExt.test(href)) photoSrc = href;
+      if (href && imgExt.test(href)) photoSrcs.push(href);
     }
     // 3. ExtendedData / SimpleData field whose value looks like an image path
-    if (!photoSrc) {
+    if (!photoSrcs.length) {
       for (const v of Object.values(fields)) {
-        if (v && imgExt.test(v)) { photoSrc = v; break; }
+        if (v && imgExt.test(v)) { photoSrcs.push(v); break; }
       }
     }
     // 4. Match by sanitised placemark name to a ZIP image basename
-    if (!photoSrc && zipImageFiles && zipImageFiles.length) {
+    if (!photoSrcs.length && zipImageFiles && zipImageFiles.length) {
       const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
       const nameSan = norm(name);
       if (nameSan.length) {
         const hit = zipImageFiles.find(f => norm(f.split('/').pop().replace(/\.[^.]+$/, '')) === nameSan);
-        if (hit) photoSrc = hit;
+        if (hit) photoSrcs.push(hit);
       }
     }
+    // Legacy compat: keep photoSrc as first element so old code that reads it still works
+    const photoSrc = photoSrcs[0] || null;
 
     const ptEl = pm.querySelector('Point coordinates');
     if (ptEl) {
       const parts = ptEl.textContent.trim().split(',');
       const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
       if (!isNaN(lat) && !isNaN(lng)) {
-        points.push({ name, desc, fields, lat, lng, photoSrc });
+        points.push({ name, desc, fields, lat, lng, photoSrc, photoSrcs });
         Object.keys(fields).forEach(k => ptExtSet.add(k));
       }
       return;
@@ -1545,7 +1547,7 @@ function parseKMLFeatures(kmlText, zipImageFiles) {
         return [parseFloat(p[0]), parseFloat(p[1])];
       }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
       if (coords.length >= 2) {
-        lines.push({ name, desc, fields, coords, photoSrc });
+        lines.push({ name, desc, fields, coords, photoSrc, photoSrcs });
         Object.keys(fields).forEach(k => lnExtSet.add(k));
       }
     });
@@ -1555,11 +1557,11 @@ function parseKMLFeatures(kmlText, zipImageFiles) {
 
   // Strategy 5: same number of images as features and none matched yet — assign by order
   if (zipImageFiles && zipImageFiles.length) {
-    if (points.every(p => !p.photoSrc) && zipImageFiles.length === points.length) {
-      points.forEach((p, i) => { p.photoSrc = zipImageFiles[i]; });
+    if (points.every(p => !p.photoSrcs.length) && zipImageFiles.length === points.length) {
+      points.forEach((p, i) => { p.photoSrcs = [zipImageFiles[i]]; p.photoSrc = zipImageFiles[i]; });
       console.log('[KMZ import] assigned photos by index (count match)');
-    } else if (lines.every(l => !l.photoSrc) && zipImageFiles.length === lines.length) {
-      lines.forEach((l, i) => { l.photoSrc = zipImageFiles[i]; });
+    } else if (lines.every(l => !l.photoSrcs.length) && zipImageFiles.length === lines.length) {
+      lines.forEach((l, i) => { l.photoSrcs = [zipImageFiles[i]]; l.photoSrc = zipImageFiles[i]; });
     }
   }
 
@@ -1696,9 +1698,9 @@ function showImportConfigModal(parsed, filename) {
         ${skippedPolygons ? `<p style="font-size:12px;color:#888;margin:4px 0 10px">ℹ ${skippedPolygons} polygon(s) skipped (not supported)</p>` : ''}
 
         ${(() => {
-          const hasPhotos = _importZip && [...points, ...lines].some(f => f.photoSrc);
+          const hasPhotos = _importZip && [...points, ...lines].some(f => f.photoSrcs && f.photoSrcs.length);
           if (!hasPhotos) return '';
-          const photoCount = [...points, ...lines].filter(f => f.photoSrc).length;
+          const photoCount = [...points, ...lines].reduce((n, f) => n + (f.photoSrcs ? f.photoSrcs.length : 0), 0);
           return `<div style="margin-bottom:12px;padding:8px 10px;background:#e8f5e9;border-radius:6px;font-size:13px;">
             📷 ${photoCount} embedded photo(s) found — will be attached to each feature automatically.
           </div>`;
@@ -1824,14 +1826,14 @@ async function startImport(btn) {
         const p = await api('POST', '/poles', { name, notes: mapped.poleNotes ?? mapped.closureNotes, lat: feat.lat, lng: feat.lng, layer_id: layerId });
         p.geom = typeof p.geom === 'string' ? JSON.parse(p.geom) : p.geom;
         state.poles.push(p);
-        await attachImportPhoto('pole', p.id, feat.photoSrc);
+        for (const src of (feat.photoSrcs || [])) await attachImportPhoto('pole', p.id, src);
       } else if (feat._type === 'closure') {
         const name = (mapped.closureName ?? mapped.featureName ?? feat.name) || 'Closure';
         const c = await api('POST', '/closures', { name, notes: mapped.closureNotes ?? mapped.poleNotes, lat: feat.lat, lng: feat.lng, layer_id: layerId });
         c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
         if (!c.cables) c.cables = [];
         state.closures.push(c);
-        await attachImportPhoto('closure', c.id, feat.photoSrc);
+        for (const src of (feat.photoSrcs || [])) await attachImportPhoto('closure', c.id, src);
       } else if (feat._type === 'pole_closure') {
         const pName = mapped.poleName ?? randomPoleName();
         const cName = (mapped.closureName ?? mapped.featureName ?? feat.name) || 'Closure';
@@ -1842,9 +1844,10 @@ async function startImport(btn) {
         c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
         if (!c.cables) c.cables = [];
         state.closures.push(c);
-        // attach photo to whichever entity type the chosen field targets
-        await attachImportPhoto('pole', p.id, feat.photoSrc);
-        await attachImportPhoto('closure', c.id, feat.photoSrc);
+        for (const src of (feat.photoSrcs || [])) {
+          await attachImportPhoto('pole', p.id, src);
+          await attachImportPhoto('closure', c.id, src);
+        }
       } else if (feat._type === 'route') {
         const name = (mapped.featureName ?? feat.name) || 'Route';
         const r = await api('POST', '/routes', { name, notes: mapped.poleNotes ?? mapped.closureNotes, points: feat.coords, fiber_count: fc, color, attached_poles: [], layer_id: layerId });
@@ -2469,7 +2472,9 @@ async function entityPhotoDelete(photoId) {
 
 async function entityPhotoUpload(input, entityType, entityId) {
   const grid = document.getElementById('entity-photo-grid');
-  for (const file of [...input.files]) {
+  const files = [...input.files];
+  let failed = 0;
+  for (const file of files) {
     const fd = new FormData();
     fd.append('file', file);
     try {
@@ -2477,9 +2482,10 @@ async function entityPhotoUpload(input, entityType, entityId) {
       if (!res.ok) throw new Error(await res.text());
       const photo = await res.json();
       if (grid) grid.insertAdjacentHTML('beforeend', entityPhotoThumbHtml(photo));
-    } catch (e) { console.warn('Photo upload failed:', e); }
+    } catch (e) { console.warn('Photo upload failed:', e); failed++; }
   }
   input.value = '';
+  if (failed) alert(`${failed} of ${files.length} photo(s) failed to upload. Check the browser console for details.`);
 }
 
 // ============ EDIT MODAL ============

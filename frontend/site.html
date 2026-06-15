@@ -506,7 +506,9 @@ async function entityPhotoDelete(photoId) {
 
 async function entityPhotoUpload(input, entityType, entityId) {
   const grid = document.getElementById('entity-photo-grid');
-  for (const file of [...input.files]) {
+  const files = [...input.files];
+  let failed = 0;
+  for (const file of files) {
     const fd = new FormData();
     fd.append('file', file);
     try {
@@ -514,9 +516,10 @@ async function entityPhotoUpload(input, entityType, entityId) {
       if (!res.ok) throw new Error(await res.text());
       const photo = await res.json();
       if (grid) grid.insertAdjacentHTML('beforeend', entityPhotoThumbHtml(photo));
-    } catch (e) { console.warn('Photo upload failed:', e); }
+    } catch (e) { console.warn('Photo upload failed:', e); failed++; }
   }
   input.value = '';
+  if (failed) alert(`${failed} of ${files.length} photo(s) failed to upload. Check the browser console for details.`);
 }
 
 async function init() {
