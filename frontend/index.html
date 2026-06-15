@@ -1356,7 +1356,12 @@ async function onImportFileChosen(input) {
       kmlText = await file.text();
     }
   } catch (e) { alert('Could not read file: ' + e.message); return; }
-  const parsed = parseKMLFeatures(kmlText);
+  const zipImageFiles = _importZip
+    ? Object.keys(_importZip.files).filter(n => /\.(jpg|jpeg|png|gif|webp)$/i.test(n))
+    : [];
+  console.log('[KMZ import] image files in ZIP:', zipImageFiles);
+  const parsed = parseKMLFeatures(kmlText, zipImageFiles);
+  console.log('[KMZ import] points with photoSrc:', parsed.points.filter(p => p.photoSrc).length, '/', parsed.points.length);
   showImportConfigModal(parsed, file.name);
 }
 
@@ -1460,11 +1465,13 @@ async function exportKMZ() {
   }
 }
 
-function parseKMLFeatures(kmlText) {
+function parseKMLFeatures(kmlText, zipImageFiles) {
   const doc = new DOMParser().parseFromString(kmlText, 'text/xml');
   const points = [], lines = [];
   let skippedPolygons = 0;
   const ptExtSet = new Set(), lnExtSet = new Set();
+  const imgExt = /\.(jpg|jpeg|png|gif|webp)$/i;
+
   doc.querySelectorAll('Placemark').forEach(pm => {
     const name = pm.querySelector('name')?.textContent?.trim() || '';
     const desc = pm.querySelector('description')?.textContent?.trim() || '';
@@ -1479,9 +1486,32 @@ function parseKMLFeatures(kmlText) {
       const v = d.textContent?.trim() || '';
       if (k) fields[k] = v;
     });
-    // Extract first embedded image src from description (KMZ stores images in files/)
-    const imgMatch = desc.match(/<img[^>]+src=["']([^"']+)["']/i);
-    const photoSrc = imgMatch ? imgMatch[1] : null;
+
+    // Photo detection — 4 strategies in priority order
+    let photoSrc = null;
+    // 1. <img src> in description HTML (Google Earth, most desktop tools)
+    const imgMatch = desc.match(/<img[^>]+src=["']?([^"'\s>]+\.(?:jpg|jpeg|png|gif|webp))/i);
+    if (imgMatch) photoSrc = imgMatch[1];
+    // 2. PhotoOverlay <Icon><href>
+    if (!photoSrc) {
+      const href = pm.querySelector('Icon href')?.textContent?.trim();
+      if (href && imgExt.test(href)) photoSrc = href;
+    }
+    // 3. ExtendedData / SimpleData field whose value looks like an image path
+    if (!photoSrc) {
+      for (const v of Object.values(fields)) {
+        if (v && imgExt.test(v)) { photoSrc = v; break; }
+      }
+    }
+    // 4. Match by sanitised placemark name to a ZIP image basename
+    if (!photoSrc && zipImageFiles && zipImageFiles.length) {
+      const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const nameSan = norm(name);
+      if (nameSan.length) {
+        const hit = zipImageFiles.find(f => norm(f.split('/').pop().replace(/\.[^.]+$/, '')) === nameSan);
+        if (hit) photoSrc = hit;
+      }
+    }
 
     const ptEl = pm.querySelector('Point coordinates');
     if (ptEl) {
@@ -1507,6 +1537,17 @@ function parseKMLFeatures(kmlText) {
     if (lsEls.length) return;
     if (pm.querySelector('Polygon')) skippedPolygons++;
   });
+
+  // Strategy 5: same number of images as features and none matched yet — assign by order
+  if (zipImageFiles && zipImageFiles.length) {
+    if (points.every(p => !p.photoSrc) && zipImageFiles.length === points.length) {
+      points.forEach((p, i) => { p.photoSrc = zipImageFiles[i]; });
+      console.log('[KMZ import] assigned photos by index (count match)');
+    } else if (lines.every(l => !l.photoSrc) && zipImageFiles.length === lines.length) {
+      lines.forEach((l, i) => { l.photoSrc = zipImageFiles[i]; });
+    }
+  }
+
   return { points, lines, skippedPolygons, ptExtFields: [...ptExtSet], lnExtFields: [...lnExtSet] };
 }
 
@@ -1723,17 +1764,34 @@ async function startImport(btn) {
   async function attachImportPhoto(entityType, entityId, photoSrc) {
     if (!photoFieldDef || !photoSrc || !_importZip) return;
     if (photoFieldDef.entity_type !== entityType) return;
-    const entry = _importZip.files[photoSrc] || _importZip.files['files/' + photoSrc.replace(/^files\//, '')];
-    if (!entry) return;
+    // Try multiple path patterns
+    const base = photoSrc.split('/').pop();
+    let entry = _importZip.files[photoSrc]
+      || _importZip.files['files/' + base]
+      || _importZip.files[base];
+    if (!entry) {
+      // Last resort: case-insensitive basename match
+      const baseLow = base.toLowerCase();
+      const key = Object.keys(_importZip.files).find(k => k.split('/').pop().toLowerCase() === baseLow);
+      if (key) entry = _importZip.files[key];
+    }
+    if (!entry) {
+      console.warn('[KMZ import] image not found in ZIP:', photoSrc, '— available:', Object.keys(_importZip.files));
+      return;
+    }
     try {
       const blob = await entry.async('blob');
-      const fname = photoSrc.split('/').pop() || 'photo.jpg';
+      const ext = base.toLowerCase().split('.').pop();
+      const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
+      const type = mimeMap[ext] || 'image/jpeg';
       const fd = new FormData();
-      fd.append('file', new File([blob], fname, { type: blob.type || 'image/jpeg' }));
+      fd.append('file', new File([blob], base, { type }));
       const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+      if (!res.ok) { console.warn('[KMZ import] upload failed, status:', res.status); return; }
       const { url } = await res.json();
       await api('PUT', `/field-values/${entityType}/${entityId}`, { values: { [photoFieldDef.id]: url } });
-    } catch (e) { console.warn('Photo import failed for', photoSrc, e); }
+      console.log('[KMZ import] photo saved:', url, '->', entityType, entityId);
+    } catch (e) { console.warn('[KMZ import] photo import failed for', photoSrc, e); }
   }
 
   let done = 0, errors = 0;
