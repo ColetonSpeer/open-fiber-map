@@ -2462,6 +2462,7 @@ function openPhotoLightbox(url) {
     lb.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:99999;align-items:center;justify-content:center;cursor:zoom-out;';
     lb.innerHTML = `
       <button onclick="closePhotoLightbox()" style="position:absolute;top:14px;right:18px;background:none;border:none;color:#fff;font-size:30px;line-height:1;cursor:pointer;padding:0;opacity:.8;">✕</button>
+      <a id="photo-lightbox-dl" download style="position:absolute;top:16px;right:62px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:5px;padding:4px 10px;font-size:13px;text-decoration:none;cursor:pointer;backdrop-filter:blur(4px);">⬇ Download</a>
       <img id="photo-lightbox-img" style="max-width:90vw;max-height:90vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain;cursor:default;">
     `;
     lb.addEventListener('click', e => { if (e.target === lb) closePhotoLightbox(); });
@@ -2469,6 +2470,9 @@ function openPhotoLightbox(url) {
     document.body.appendChild(lb);
   }
   lb.querySelector('#photo-lightbox-img').src = url;
+  const dl = lb.querySelector('#photo-lightbox-dl');
+  dl.href = url;
+  dl.download = url.split('/').pop();
   lb.style.display = 'flex';
 }
 function closePhotoLightbox() {
