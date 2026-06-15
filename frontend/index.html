@@ -2097,6 +2097,11 @@ async function showFiberInfo(route) {
     if (d.field_type === 'dropdown') {
       const opts = (d.options || []).map(o => `<option value="${h(o)}" ${val===o?'selected':''}>${h(o)}</option>`).join('');
       customHtml += `<label>${h(d.field_label)}</label><select data-def="${d.id}"><option value=""></option>${opts}</select>`;
+    } else if (d.field_type === 'photo') {
+      const preview = val
+        ? `<img id="photo-preview-${d.id}" src="${h(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+        : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
+      customHtml += `<label>${h(d.field_label)}</label>${preview}<input type="hidden" data-def="${d.id}" value="${h(val)}"><input type="file" accept="image/*" style="margin-bottom:6px;" onchange="uploadPhoto(this,'${d.id}')">`;
     } else {
       customHtml += `<label>${h(d.field_label)}</label><input data-def="${d.id}" value="${h(val)}">`;
     }
@@ -2207,6 +2212,21 @@ function promptBulkDelete(bounds) {
   });
 }
 
+async function uploadPhoto(input, defId) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+    const { url } = await res.json();
+    const hidden = document.querySelector(`input[type=hidden][data-def="${defId}"]`);
+    if (hidden) hidden.value = url;
+    const img = document.getElementById('photo-preview-' + defId);
+    if (img) { img.src = url; img.style.display = 'block'; }
+  } catch (e) { alert('Photo upload failed'); }
+}
+
 // ============ EDIT MODAL ============
 async function openEditModal(entityType, entityId, obj) {
   if (!obj) return;
@@ -2242,6 +2262,11 @@ async function openEditModal(entityType, entityId, obj) {
     if (d.field_type === 'dropdown') {
       const opts = (d.options || []).map(o => `<option value="${h(o)}" ${val===o?'selected':''}>${h(o)}</option>`).join('');
       customHtml += `<label>${h(d.field_label)}</label><select data-def="${d.id}"><option value=""></option>${opts}</select>`;
+    } else if (d.field_type === 'photo') {
+      const preview = val
+        ? `<img id="photo-preview-${d.id}" src="${h(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+        : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
+      customHtml += `<label>${h(d.field_label)}</label>${preview}<input type="hidden" data-def="${d.id}" value="${h(val)}"><input type="file" accept="image/*" style="margin-bottom:6px;" onchange="uploadPhoto(this,'${d.id}')">`;
     } else {
       customHtml += `<label>${h(d.field_label)}</label><input data-def="${d.id}" value="${h(val)}">`;
     }
@@ -2304,7 +2329,11 @@ async function openViewModal(entityType, entityId, obj) {
   }
   defs.forEach(d => {
     const val = valMap[d.id] || '';
-    rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? h(val) : '<em style="color:#999">—</em>'}</span></div>`;
+    if (d.field_type === 'photo') {
+      rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? `<a href="${h(val)}" target="_blank"><img src="${h(val)}" style="max-width:120px;max-height:90px;border-radius:4px;"></a>` : '<em style="color:#999">—</em>'}</span></div>`;
+    } else {
+      rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? h(val) : '<em style="color:#999">—</em>'}</span></div>`;
+    }
   });
 
   const bg = document.createElement('div');
@@ -2756,7 +2785,11 @@ function renderPanel() {
           if (c.notes) mf += `<div class="panel-meta-field"><span class="panel-meta-label">Notes</span>${h(c.notes)}</div>`;
           if (c.fieldValues && c.fieldValues.length) {
             for (const fv of c.fieldValues) {
-              if (fv.value) mf += `<div class="panel-meta-field"><span class="panel-meta-label">${h(fv.field_label)}</span>${h(fv.value)}</div>`;
+              if (!fv.value) continue;
+              const display = fv.field_type === 'photo'
+                ? `<a href="${h(fv.value)}" target="_blank"><img src="${h(fv.value)}" style="max-width:80px;max-height:60px;border-radius:3px;vertical-align:middle;"></a>`
+                : h(fv.value);
+              mf += `<div class="panel-meta-field"><span class="panel-meta-label">${h(fv.field_label)}</span>${display}</div>`;
             }
           }
           return mf ? `<div class="panel-meta-fields">${mf}</div>` : '';

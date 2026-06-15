@@ -8,6 +8,8 @@ const PgSession = require('connect-pg-simple')(session);
 const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -94,6 +96,17 @@ app.use(session({
 
 // Static files (frontend)
 app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Uploads — created at boot, served as static
+const uploadsDir = path.join(__dirname, 'uploads');
+fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
+
+const upload = multer({
+  dest: uploadsDir,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter(_, file, cb) { cb(null, /^image\//.test(file.mimetype)); },
+});
 
 // ============ AUTH MIDDLEWARE ============
 
@@ -585,6 +598,14 @@ app.delete('/api/field-defs/:id', requireAdmin, async (req, res) => {
     await pool.query('DELETE FROM custom_field_defs WHERE id=$1', [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/uploads', requireAuth, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+  const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+  const dest = req.file.path + ext;
+  fs.renameSync(req.file.path, dest);
+  res.json({ url: '/uploads/' + path.basename(dest) });
 });
 
 app.get('/api/connector-types', requireAuth, async (req, res) => {
@@ -1932,7 +1953,10 @@ app.get('/api/devices/:id/measurements', requireAuth, async (req, res) => {
 app.get('/api/field-values/:entityType/:entityId', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT field_def_id, value FROM custom_field_values WHERE entity_type=$1 AND entity_id=$2',
+      `SELECT v.field_def_id, v.value, d.field_label, d.field_type
+       FROM custom_field_values v
+       JOIN custom_field_defs d ON d.id = v.field_def_id
+       WHERE v.entity_type=$1 AND v.entity_id=$2`,
       [req.params.entityType, req.params.entityId]
     );
     res.json(result.rows);

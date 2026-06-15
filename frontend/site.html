@@ -471,6 +471,21 @@ function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+async function uploadPhoto(input, defId) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+    const { url } = await res.json();
+    const hidden = document.querySelector(`input[type=hidden][data-def="${defId}"]`);
+    if (hidden) hidden.value = url;
+    const img = document.getElementById('photo-preview-' + defId);
+    if (img) { img.src = url; img.style.display = 'block'; }
+  } catch (e) { alert('Photo upload failed'); }
+}
+
 async function init() {
   if (!siteId) { showError(); return; }
   try {
@@ -534,9 +549,12 @@ function render() {
   `;
   fieldDefs.forEach(d => {
     const val = fieldValues[d.id] || '';
+    const display = d.field_type === 'photo' && val
+      ? `<a href="${esc(val)}" target="_blank"><img src="${esc(val)}" style="max-width:120px;max-height:90px;border-radius:4px;"></a>`
+      : (val ? esc(val) : '<em style="color:#aaa">—</em>');
     rows += `<div class="info-row">
       <span class="info-label">${esc(d.field_label)}</span>
-      <span class="info-value">${val ? esc(val) : '<em style="color:#aaa">—</em>'}</span>
+      <span class="info-value">${display}</span>
     </div>`;
   });
   document.getElementById('info-rows').innerHTML = rows;
@@ -899,6 +917,11 @@ function openEditModal() {
       if (d.field_type === 'dropdown') {
         const opts = (d.options || []).map(o => `<option value="${esc(o)}"${val===o?' selected':''}>${esc(o)}</option>`).join('');
         customHtml += `<select data-def="${d.id}" class="modal-input"><option value=""></option>${opts}</select>`;
+      } else if (d.field_type === 'photo') {
+        const preview = val
+          ? `<img id="photo-preview-${d.id}" src="${esc(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+          : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
+        customHtml += `${preview}<input type="hidden" data-def="${d.id}" value="${esc(val)}"><input type="file" accept="image/*" class="modal-input" onchange="uploadPhoto(this,'${d.id}')">`;
       } else {
         customHtml += `<input data-def="${d.id}" class="modal-input" value="${esc(val)}">`;
       }
@@ -1690,6 +1713,11 @@ async function openEqEditModal(equipId) {
       if (d.field_type === 'dropdown') {
         const opts = (d.options || []).map(o => `<option value="${esc(o)}"${val===o?' selected':''}>${esc(o)}</option>`).join('');
         customHtml += `<select data-def="${d.id}" class="modal-input"><option value=""></option>${opts}</select>`;
+      } else if (d.field_type === 'photo') {
+        const preview = val
+          ? `<img id="photo-preview-${d.id}" src="${esc(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+          : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
+        customHtml += `${preview}<input type="hidden" data-def="${d.id}" value="${esc(val)}"><input type="file" accept="image/*" class="modal-input" onchange="uploadPhoto(this,'${d.id}')">`;
       } else {
         customHtml += `<input data-def="${d.id}" class="modal-input" value="${esc(val)}">`;
       }

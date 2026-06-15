@@ -199,6 +199,7 @@ npm install --omit=dev --silent
 info "Dependencies installed."
 
 # ── Set file permissions ───────────────────────────────────────────────────────
+mkdir -p "$INSTALL_DIR/backend/uploads"
 chown -R www-data:www-data "$INSTALL_DIR"
 chmod -R 755 "$INSTALL_DIR"
 chmod 600 "$INSTALL_DIR/backend/.env"
