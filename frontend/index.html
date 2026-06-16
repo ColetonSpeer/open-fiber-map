@@ -213,6 +213,40 @@ body.dark-mode .import-progress-wrap { background:#374151; }
 body.dark-mode .import-photo-notice { background:#1a3a2a; color:#86efac; }
 .import-plan-notice { display:flex; align-items:center; gap:8px; margin-bottom:12px; padding:8px 10px; background:#f3eafc; color:#4527a0; border-radius:6px; font-size:13px; cursor:pointer; }
 body.dark-mode .import-plan-notice { background:#2e2540; color:#c9b6f0; }
+
+/* Generic dark-mode fallbacks for hardcoded light inline styles (modals, panels). */
+body.dark-mode [style*="background:white"],
+body.dark-mode [style*="background: white"],
+body.dark-mode [style*="background:#fff"],
+body.dark-mode [style*="background: #fff"],
+body.dark-mode [style*="background-color:#fff"],
+body.dark-mode [style*="background:#fafafa"],
+body.dark-mode [style*="background:#fbfbfb"],
+body.dark-mode [style*="background:#f9f9f9"],
+body.dark-mode [style*="background:#f8f8fa"],
+body.dark-mode [style*="background:#f8f9fa"],
+body.dark-mode [style*="background:#f7f7f7"],
+body.dark-mode [style*="background:#f5f5f5"],
+body.dark-mode [style*="background:#f0f0f0"],
+body.dark-mode [style*="background:#eee"] {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+}
+body.dark-mode [style*="background:#fff5f5"] { background-color: #3a1f1f !important; }
+body.dark-mode [style*="solid #ccc"],
+body.dark-mode [style*="solid #ddd"],
+body.dark-mode [style*="solid #eee"],
+body.dark-mode [style*="solid #e0e0e0"] { border-color: #374151 !important; }
+body.dark-mode [style*="color:#666"],
+body.dark-mode [style*="color:#555"],
+body.dark-mode [style*="color:#444"],
+body.dark-mode [style*="color:#333"],
+body.dark-mode [style*="color:#222"],
+body.dark-mode [style*="color:#000"] { color: #cbd5e1 !important; }
+body.dark-mode input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]),
+body.dark-mode select, body.dark-mode textarea {
+  background-color: #111827 !important; border-color: #4b5563 !important; color: #f3f4f6 !important;
+}
 </style>
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>

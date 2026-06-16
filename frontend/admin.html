@@ -79,6 +79,48 @@
   body.dark-mode .btn-row button:not(.primary) { background: #374151; border-color: #4b5563; color: #d1d5db; }
   body.dark-mode .icon-btn { color: #9ca3af; }
   body.dark-mode .icon-btn:hover { background: #374151; }
+
+  /* Generic dark-mode fallbacks for hardcoded light inline styles
+     (e.g. port-group rows, builder buttons). Only affects dark mode. */
+  body.dark-mode [style*="background:white"],
+  body.dark-mode [style*="background: white"],
+  body.dark-mode [style*="background:#fff"],
+  body.dark-mode [style*="background: #fff"],
+  body.dark-mode [style*="background-color:#fff"],
+  body.dark-mode [style*="background:#fafafa"],
+  body.dark-mode [style*="background:#fbfbfb"],
+  body.dark-mode [style*="background:#f9f9f9"],
+  body.dark-mode [style*="background:#f8f8fa"],
+  body.dark-mode [style*="background:#f8f9fa"],
+  body.dark-mode [style*="background:#f7f7f7"],
+  body.dark-mode [style*="background:#f5f5f5"],
+  body.dark-mode [style*="background:#f0f0f0"],
+  body.dark-mode [style*="background:#eee"] {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+  }
+  /* Light-tinted status backgrounds → darker tints */
+  body.dark-mode [style*="background:#fff5f5"] { background-color: #3a1f1f !important; }
+  body.dark-mode [style*="background:#e8f5e9"],
+  body.dark-mode [style*="background:#e8f4fd"],
+  body.dark-mode [style*="background:#e3f2fd"] { background-color: #1e3a2e !important; }
+  /* Light inline borders → dark */
+  body.dark-mode [style*="solid #ccc"],
+  body.dark-mode [style*="solid #ddd"],
+  body.dark-mode [style*="solid #eee"],
+  body.dark-mode [style*="solid #e0e0e0"] { border-color: #374151 !important; }
+  /* Dark inline text → light enough to read on a dark surface */
+  body.dark-mode [style*="color:#666"],
+  body.dark-mode [style*="color:#555"],
+  body.dark-mode [style*="color:#444"],
+  body.dark-mode [style*="color:#333"],
+  body.dark-mode [style*="color:#222"],
+  body.dark-mode [style*="color:#000"] { color: #cbd5e1 !important; }
+  /* Inputs/selects override inline light borders/backgrounds (skip checkbox/radio/color) */
+  body.dark-mode input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]),
+  body.dark-mode select, body.dark-mode textarea {
+    background-color: #111827 !important; border-color: #4b5563 !important; color: #f3f4f6 !important;
+  }
 </style>
 </head>
 <body>
