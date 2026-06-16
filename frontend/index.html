@@ -1723,6 +1723,9 @@ function showImportConfigModal(parsed, filename) {
             Default fibers: <input type="number" id="imp-fcount" value="12" min="1" max="9999" style="width:60px;padding:3px 6px;border:1px solid #ccc;border-radius:4px">
             Color: <input type="color" id="imp-color" value="#FF8800" style="width:36px;height:24px;border:none;cursor:pointer">
           </div>
+          <div style="display:flex;gap:6px;margin-top:6px;font-size:12px;align-items:center" title="Routes passing within this distance of a pole are automatically attached to it. Set 0 to disable.">
+            📌 Auto-attach to poles within <input type="number" id="imp-snap" value="5" min="0" max="100" step="1" style="width:54px;padding:3px 6px;border:1px solid #ccc;border-radius:4px"> m
+          </div>
         </div>` : ''}
 
         ${skippedPolygons ? `<p style="font-size:12px;color:#888;margin:4px 0 10px">ℹ ${skippedPolygons} polygon(s) skipped (not supported)</p>` : ''}
@@ -1759,6 +1762,66 @@ function showImportConfigModal(parsed, filename) {
   bg.addEventListener('click', () => { bg.remove(); _pendingImport = null; });
 }
 
+// Auto-attach poles to an imported route: for every pole whose distance to the
+// route polyline is within snapM meters, attach it and ensure the route has a
+// vertex exactly at the pole (snapping a nearby endpoint or inserting a new
+// vertex) so dragging the pole later moves the route with it.
+// coords: [[lng,lat], ...]; poles: [{id, geom:{coordinates:[lng,lat]}}].
+function autoAttachPolesToRoute(coords, poles, snapM) {
+  if (!coords || coords.length < 2 || !poles.length || !(snapM > 0)) {
+    return { coords, attachedPoleIds: [] };
+  }
+  const padDeg = snapM / 111320 + 1e-5;
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const [lng, lat] of coords) {
+    minLng = Math.min(minLng, lng); maxLng = Math.max(maxLng, lng);
+    minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+  }
+  const attached = new Set();
+  const insertions = []; // {segIndex, t, lng, lat}
+  for (const p of poles) {
+    const [plng, plat] = p.geom.coordinates;
+    if (plng < minLng - padDeg || plng > maxLng + padDeg || plat < minLat - padDeg || plat > maxLat + padDeg) continue;
+    const mPerLat = 111320, mPerLng = 111320 * Math.cos(plat * Math.PI / 180);
+    let best = null;
+    for (let i = 0; i < coords.length - 1; i++) {
+      // segment endpoints relative to the pole (pole at origin), in meters
+      const Ax = (coords[i][0]   - plng) * mPerLng, Ay = (coords[i][1]   - plat) * mPerLat;
+      const Bx = (coords[i+1][0] - plng) * mPerLng, By = (coords[i+1][1] - plat) * mPerLat;
+      const dx = Bx - Ax, dy = By - Ay;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 > 0 ? -(Ax * dx + Ay * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const Cx = Ax + t * dx, Cy = Ay + t * dy;
+      const dist = Math.hypot(Cx, Cy);
+      if (!best || dist < best.dist) best = { segIndex: i, t, dist };
+    }
+    if (best && best.dist <= snapM) {
+      attached.add(p.id);
+      insertions.push({ segIndex: best.segIndex, t: best.t, lng: plng, lat: plat });
+    }
+  }
+  if (!insertions.length) return { coords, attachedPoleIds: [] };
+  // Snap to an existing endpoint when the projection lands on one; else insert.
+  const snapMap = {};   // vertexIndex -> [lng,lat]
+  const segInserts = {}; // segIndex -> [{t,lng,lat}]
+  for (const ins of insertions) {
+    if (ins.t <= 0.02)      snapMap[ins.segIndex]     = [ins.lng, ins.lat];
+    else if (ins.t >= 0.98) snapMap[ins.segIndex + 1] = [ins.lng, ins.lat];
+    else (segInserts[ins.segIndex] ||= []).push(ins);
+  }
+  const base = coords.map((c, i) => snapMap[i] ? snapMap[i].slice() : c.slice());
+  const out = [];
+  for (let i = 0; i < base.length; i++) {
+    out.push(base[i]);
+    if (segInserts[i]) {
+      segInserts[i].sort((a, b) => a.t - b.t);
+      for (const ins of segInserts[i]) out.push([ins.lng, ins.lat]);
+    }
+  }
+  return { coords: out, attachedPoleIds: [...attached] };
+}
+
 async function startImport(btn) {
   const { parsed } = _pendingImport;
   const modal = btn.closest('.modal');
@@ -1766,6 +1829,7 @@ async function startImport(btn) {
   const lnType = modal.querySelector('input[name="ln-type"]:checked')?.value ?? 'skip';
   const fCount = parseInt(modal.querySelector('#imp-fcount')?.value) || 12;
   const color  = modal.querySelector('#imp-color')?.value || '#FF8800';
+  const snapM  = Math.max(0, parseFloat(modal.querySelector('#imp-snap')?.value) || 0);
   const asPlan = (modal.querySelector('#imp-plan')?.checked) || (state.user && state.user.role === 'planner');
   const groupName = asPlan ? _pendingImport.groupName.replace(/ - Imported$/, ' - Plan') : _pendingImport.groupName;
   const ptMapping = {}, lnMapping = {};
@@ -1853,7 +1917,7 @@ async function startImport(btn) {
     } catch (e) { console.warn('[KMZ import] photo import failed for', photoSrc, e); }
   }
 
-  let done = 0, errors = 0;
+  let done = 0, errors = 0, attachCount = 0;
   for (const feat of toImport) {
     const mapped = applyFieldMapping(feat, feat._type === 'route' ? lnMapping : ptMapping);
     const fc = mapped.fiberCount ?? fCount;
@@ -1887,7 +1951,13 @@ async function startImport(btn) {
         }
       } else if (feat._type === 'route') {
         const name = (mapped.featureName ?? feat.name) || 'Route';
-        const r = await api('POST', '/routes', { name, notes: mapped.poleNotes ?? mapped.closureNotes, points: feat.coords, fiber_count: fc, color, attached_poles: [], layer_id: layerId, is_plan: asPlan });
+        let points = feat.coords, attachedPoles = [];
+        if (snapM > 0) {
+          const res = autoAttachPolesToRoute(feat.coords, state.poles, snapM);
+          points = res.coords; attachedPoles = res.attachedPoleIds;
+          attachCount += attachedPoles.length;
+        }
+        const r = await api('POST', '/routes', { name, notes: mapped.poleNotes ?? mapped.closureNotes, points, fiber_count: fc, color, attached_poles: attachedPoles, layer_id: layerId, is_plan: asPlan });
         r.geom = typeof r.geom === 'string' ? JSON.parse(r.geom) : r.geom;
         state.routes.push(r);
       }
@@ -1901,9 +1971,10 @@ async function startImport(btn) {
   renderLayersPanel();
   btn.closest('.modal-bg').remove();
   _pendingImport = null;
+  const attachNote = attachCount ? ` ${attachCount} pole attachment${attachCount !== 1 ? 's' : ''} auto-detected.` : '';
   const msg = errors
-    ? `Imported ${done - errors} of ${done} features (${errors} error${errors !== 1 ? 's' : ''} — see console)`
-    : `Imported ${done} feature${done !== 1 ? 's' : ''} into "${groupName}".`;
+    ? `Imported ${done - errors} of ${done} features (${errors} error${errors !== 1 ? 's' : ''} — see console).${attachNote}`
+    : `Imported ${done} feature${done !== 1 ? 's' : ''} into "${groupName}".${attachNote}`;
   alert(msg);
 }
 
