@@ -694,7 +694,7 @@ CREATE TABLE public.routes (
     created_at timestamp without time zone DEFAULT now(),
     color character varying(20) DEFAULT '#FF8800'::character varying,
     attached_poles integer[] DEFAULT '{}'::integer[],
-    fiber_count integer DEFAULT 12 NOT NULL,
+    fiber_count integer DEFAULT 12,
     attached_sites integer[] DEFAULT '{}'::integer[],
     layer_id integer,
     is_plan boolean DEFAULT false

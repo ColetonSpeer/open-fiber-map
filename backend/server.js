@@ -349,13 +349,15 @@ app.post('/api/routes', requireAuth, async (req, res) => {
     const { name, notes, points, fiber_count, color, attached_poles, attached_sites, layer_id } = req.body;
     const layerId = layer_id || (await getDefaultLayerId());
     const isPlan = req.session.role === 'planner' ? true : !!req.body.is_plan;
+    // Plan routes have no fiber count — it's assigned when promoted to the live network.
+    const fiberCount = isPlan ? null : (fiber_count || 12);
     const wkt = `LINESTRING(${points.map(p => `${p[0]} ${p[1]}`).join(',')})`;
     const result = await pool.query(`
       INSERT INTO routes (name, notes, geom, created_by, fiber_count, color, attached_poles, attached_sites, layer_id, is_plan)
       VALUES ($1, $2, ST_GeomFromText($3, 4326), $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan,
                 ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom
-    `, [name, notes || null, wkt, req.session.userId, fiber_count || 12, color || '#FF8800', attached_poles || [], attached_sites || [], layerId || null, isPlan]);
+    `, [name, notes || null, wkt, req.session.userId, fiberCount, color || '#FF8800', attached_poles || [], attached_sites || [], layerId || null, isPlan]);
     const row = result.rows[0];
     res.json({ ...row, geom: JSON.parse(row.geom) });
   } catch (err) {
@@ -366,17 +368,22 @@ app.post('/api/routes', requireAuth, async (req, res) => {
 
 app.put('/api/routes/:id', requireAuth, async (req, res) => {
   try {
-    if (!(await assertPlanEditable(req, 'routes', req.params.id)))
+    const cur = await pool.query('SELECT is_plan FROM routes WHERE id=$1', [req.params.id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'Not found' });
+    const isPlanRoute = cur.rows[0].is_plan === true;
+    if (req.session.role === 'planner' && !isPlanRoute)
       return res.status(403).json({ error: 'Plan-only account: cannot edit live objects' });
     const { name, notes, fiber_count, color, attached_poles, points } = req.body;
+    // Plan routes keep a null fiber count (assigned on promote); live routes default to 12.
+    const fiberCount = isPlanRoute ? (Number.isInteger(fiber_count) ? fiber_count : null) : (fiber_count || 12);
     let query, params;
     if (points && points.length >= 2) {
       const wkt = `LINESTRING(${points.map(p => `${p[0]} ${p[1]}`).join(',')})`;
       query = `UPDATE routes SET name=$1, notes=$2, fiber_count=$3, color=$4, attached_poles=$5, geom=ST_GeomFromText($6,4326) WHERE id=$7 RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan, ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom`;
-      params = [name, notes || null, fiber_count || 12, color || '#FF8800', attached_poles || [], wkt, req.params.id];
+      params = [name, notes || null, fiberCount, color || '#FF8800', attached_poles || [], wkt, req.params.id];
     } else {
       query = `UPDATE routes SET name=$1, notes=$2, fiber_count=$3, color=$4, attached_poles=$5 WHERE id=$6 RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan, ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom`;
-      params = [name, notes || null, fiber_count || 12, color || '#FF8800', attached_poles || [], req.params.id];
+      params = [name, notes || null, fiberCount, color || '#FF8800', attached_poles || [], req.params.id];
     }
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
@@ -418,11 +425,13 @@ app.post('/api/poles/:id/promote', requireAuth, async (req, res) => {
 app.post('/api/routes/:id/promote', requireAuth, async (req, res) => {
   try {
     if (req.session.role === 'planner') return res.status(403).json({ error: 'Plan-only account cannot promote' });
+    // A fiber count is assigned at promotion time (plan routes have none).
+    const fc = (Number.isInteger(req.body.fiber_count) && req.body.fiber_count > 0) ? req.body.fiber_count : 12;
     const result = await pool.query(
-      `UPDATE routes SET is_plan=false WHERE id=$1
+      `UPDATE routes SET is_plan=false, fiber_count=$2 WHERE id=$1
        RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan,
                  ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom`,
-      [req.params.id]
+      [req.params.id, fc]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
     const row = result.rows[0];
@@ -2474,6 +2483,7 @@ async function ensureSchema() {
     ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_plan boolean DEFAULT false;
     CREATE INDEX IF NOT EXISTS idx_poles_is_plan  ON poles(is_plan);
     CREATE INDEX IF NOT EXISTS idx_routes_is_plan ON routes(is_plan);
+    ALTER TABLE routes ALTER COLUMN fiber_count DROP NOT NULL;
     INSERT INTO connector_types (name, enabled, sort_order) VALUES
       ('LC/UPC Simplex', true, 1),
       ('LC/UPC Duplex',  true, 2),

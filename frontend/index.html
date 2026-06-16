@@ -1473,7 +1473,8 @@ async function exportKMZ() {
 
     let routePlacemarks = state.routes.map(r => {
       const coords = (r.geom?.coordinates || []).map(([lng,lat]) => `${lng},${lat},0`).join(' ');
-      const notes = r.notes ? `<b>Notes:</b> ${xe(r.notes)}<br><b>Fibers:</b> ${r.fiber_count}` : `<b>Fibers:</b> ${r.fiber_count}`;
+      const fibersLine = r.fiber_count ? `<b>Fibers:</b> ${r.fiber_count}` : `<b>Fibers:</b> (plan — TBD)`;
+      const notes = r.notes ? `<b>Notes:</b> ${xe(r.notes)}<br>${fibersLine}` : fibersLine;
       return `<Placemark><name>${xe(r.name)}</name><styleUrl>#route</styleUrl>${xmlCdata(notes)}<LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString></Placemark>`;
     }).join('\n');
 
@@ -2675,10 +2676,11 @@ async function openEditModal(entityType, entityId, obj) {
     <label>Notes</label><textarea id="ef-notes" rows="2">${h(obj.notes || '')}</textarea>
   `;
   if (entityType === 'route') {
-    standardFields += `
-      <label>Fiber count</label><input id="ef-fc" type="number" min="1" max="288" value="${obj.fiber_count || 12}">
-      <label>Color</label><input id="ef-color" type="color" value="${obj.color || '#FF8800'}">
-    `;
+    standardFields += obj.is_plan
+      ? `<div style="font-size:11px;color:#7E57C2;margin:4px 0 6px;">🧭 Plan fiber — fiber count is assigned when promoted to the live network.</div>
+         <label>Color</label><input id="ef-color" type="color" value="${obj.color || '#FF8800'}">`
+      : `<label>Fiber count</label><input id="ef-fc" type="number" min="1" max="288" value="${obj.fiber_count || 12}">
+         <label>Color</label><input id="ef-color" type="color" value="${obj.color || '#FF8800'}">`;
     if (state.poles.length > 0) {
       standardFields += `<label>Attached poles</label>
         <div style="max-height:90px;overflow-y:auto;border:1px solid #ccc;border-radius:4px;padding:4px 8px;background:#fafafa;">
@@ -2731,7 +2733,8 @@ async function openEditModal(entityType, entityId, obj) {
         const updated = await api('PUT', `/poles/${entityId}`, { name, notes });
         Object.assign(obj, updated);
       } else if (entityType === 'route') {
-        const fc = parseInt(document.getElementById('ef-fc').value) || obj.fiber_count || 12;
+        const fcEl = document.getElementById('ef-fc');
+        const fc = obj.is_plan ? null : (parseInt(fcEl && fcEl.value) || obj.fiber_count || 12);
         const color = document.getElementById('ef-color').value;
         const attachedPoles = [...document.querySelectorAll('.pole-attach:checked')].map(cb => parseInt(cb.value));
         const updated = await api('PUT', `/routes/${entityId}`, { name, notes, fiber_count: fc, color, attached_poles: attachedPoles });
@@ -2770,8 +2773,11 @@ async function openViewModal(entityType, entityId, obj) {
   `;
   if (entityType === 'route') {
     const colorSwatch = `<span style="display:inline-block;width:13px;height:13px;background:${h(obj.color||'#FF8800')};border-radius:3px;vertical-align:middle;margin-right:4px;border:1px solid #ccc;"></span>`;
+    const fcDisplay = obj.is_plan
+      ? `<em style="color:#7E57C2">— assigned on promote</em>`
+      : (obj.fiber_count || 12);
     rows += `
-      <div class="view-row"><span class="view-label">Fiber count</span><span>${obj.fiber_count || 12}</span></div>
+      <div class="view-row"><span class="view-label">Fiber count</span><span>${fcDisplay}</span></div>
       <div class="view-row"><span class="view-label">Color</span><span>${colorSwatch}${h(obj.color||'#FF8800')}</span></div>
     `;
     if (obj.length_m != null) {
@@ -2825,9 +2831,20 @@ async function openViewModal(entityType, entityId, obj) {
   document.getElementById('view-edit-btn').onclick = () => { bg.remove(); openEditModal(entityType, entityId, obj); };
   if (canPromote) {
     document.getElementById('view-promote-btn').onclick = async () => {
-      if (!confirm(`Promote this ${entityType} to the live network? It will become a permanent production object.`)) return;
+      let body;
+      if (entityType === 'route') {
+        // A plan route has no fiber count — assign one now, at promotion.
+        const ans = prompt('Promote this fiber to the live network.\n\nFiber count for the production route:', '12');
+        if (ans === null) return;
+        const fc = parseInt(ans, 10);
+        if (!Number.isInteger(fc) || fc < 1) { alert('Enter a valid fiber count (1 or more).'); return; }
+        body = { fiber_count: fc };
+      } else {
+        if (!confirm('Promote this pole to the live network? It will become a permanent production object.')) return;
+        body = undefined;
+      }
       try {
-        const updated = await api('POST', `/${entityType}s/${entityId}/promote`);
+        const updated = await api('POST', `/${entityType}s/${entityId}/promote`, body);
         Object.assign(obj, updated);
         const arr = entityType === 'route' ? state.routes : state.poles;
         const idx = arr.findIndex(x => x.id === entityId);
@@ -3097,9 +3114,12 @@ function promptCreateRoute(points, tempLine, snapClosures, snapSites) {
   const siteNote = attachedSites.length > 0
     ? `<div style="font-size:11px;color:#555;margin-top:6px;">🏢 Entering ${attachedSites.length === 2 ? '2 sites' : '1 site'}</div>`
     : '';
+  const planFc = state.planMode
+    ? `<div style="font-size:11px;color:#7E57C2;margin:4px 0 8px;">🧭 Plan fiber — fiber count is assigned when promoted to the live network.</div>`
+    : `<label>Fiber count</label><input id="m-fc" type="number" min="1" max="288" value="12">`;
   showModal('Add Fiber', `
     <label>Name</label><input id="m-name" value="Fiber-${state.routes.length + 1}">
-    <label>Fiber count</label><input id="m-fc" type="number" min="1" max="288" value="12">
+    ${planFc}
     <label>Color</label><input id="m-color" type="color" value="#FF8800">
     <label>Notes (optional)</label><textarea id="m-notes" rows="2"></textarea>
     ${poleNote}
@@ -3108,7 +3128,8 @@ function promptCreateRoute(points, tempLine, snapClosures, snapSites) {
     ${buildOnCreateHtml('route')}
   `, async () => {
     const name = document.getElementById('m-name').value.trim();
-    const fiberCount = parseInt(document.getElementById('m-fc').value) || 12;
+    const fcEl = document.getElementById('m-fc');
+    const fiberCount = state.planMode ? null : (parseInt(fcEl && fcEl.value) || 12);
     const color = document.getElementById('m-color').value;
     const notes = document.getElementById('m-notes').value.trim();
     if (!name) return false;
