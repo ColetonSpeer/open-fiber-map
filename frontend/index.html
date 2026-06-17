@@ -3631,8 +3631,19 @@ function renderPanel() {
     }
   }
 
-  if (c.splices.length > 0) {
-    html += '<div class="section-title">Splice connections</div><div class="splice-list">';
+  // Splitter input/leg bindings, listed alongside fiber↔fiber splices.
+  const splitterLinks = [];
+  (c.splitters || []).forEach(sp => {
+    if (sp.input_cable_id != null && sp.input_fiber != null)
+      splitterLinks.push({ sp, key: 'in', label: 'IN', cableId: sp.input_cable_id, fiber: sp.input_fiber });
+    (sp.outputs || []).forEach(o => {
+      if (o.output_cable_id != null && o.output_fiber != null)
+        splitterLinks.push({ sp, key: 'leg-' + o.leg_index, label: 'Leg ' + (o.label || o.leg_index), cableId: o.output_cable_id, fiber: o.output_fiber });
+    });
+  });
+
+  if (c.splices.length > 0 || splitterLinks.length > 0) {
+    html += '<div class="section-title">Connections</div><div class="splice-list">';
     c.splices.forEach(s => {
       const fC = c.cables.find(x => x.id === s.from_cable_id);
       const tC = c.cables.find(x => x.id === s.to_cable_id);
@@ -3650,6 +3661,17 @@ function renderPanel() {
         <span>${h(tC?.name || '?')} F${s.to_fiber + 1}</span>
         <button class="type-btn" onclick="toggleSpliceType(${s.id})" title="Toggle fusion / glass-through" style="margin-left:auto;">⇄</button>
         <button class="del-btn" onclick="deleteSplice(${s.id})" title="Remove" style="margin-left:0;">🗑</button>
+      </div>`;
+    });
+    splitterLinks.forEach(link => {
+      const fc = FIBER_COLORS[link.fiber % 12];
+      const cab = c.cables.find(x => x.id === link.cableId);
+      html += `<div class="splice-item">
+        <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};width:10px;height:10px;"></span>
+        <span>${h(cab?.name || '?')} F${link.fiber + 1}</span>
+        <span class="splice-type-glyph" title="Fusion splice to splitter">◆</span>
+        <span>🌳 ${h(link.sp.name)} · ${h(link.label)}</span>
+        <button class="del-btn" onclick="unbindSplitterLink(${link.sp.id},'${link.key}')" title="Remove" style="margin-left:auto;">🗑</button>
       </div>`;
     });
     html += '</div>';
