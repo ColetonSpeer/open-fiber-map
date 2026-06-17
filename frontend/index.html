@@ -4148,8 +4148,28 @@ function beginSplitterAssign(splitterId, target) {
   if (single) {
     return bindSplitterFiber(splitterId, target, single.cableId, single.fiberIdx);
   }
+  // If this port is already connected, highlight its connection (and reveal the
+  // fiber end) instead of arming an assign — same behaviour as clicking a fiber.
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const sp = c && (c.splitters || []).find(x => x.id === splitterId);
+  let bound = false;
+  if (sp) {
+    if (target === 'input') bound = sp.input_cable_id != null && sp.input_fiber != null;
+    else { const o = (sp.outputs || []).find(x => x.leg_index === target); bound = o && o.output_cable_id != null && o.output_fiber != null; }
+  }
+  if (bound) {
+    const key = target === 'input' ? 'in' : 'leg-' + target;
+    const cur = state.selectedSplitterLink;
+    state.selectedSplitterLink = (cur && cur.splitterId === splitterId && cur.key === key) ? null : { splitterId, key };
+    state.selectedSplice = null;
+    revealHighlightedConnection();
+    renderPanel();
+    return;
+  }
   splitterAssign = { splitterId, target };
   state.spliceSel = { a: null, b: null };
+  state.selectedSplice = null;
+  state.selectedSplitterLink = null;
   renderPanel();
 }
 
