@@ -3791,17 +3791,24 @@ function renderSplitterBox(sp, side, c) {
     return `<span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};width:9px;height:9px;"></span> ${h(cable?.name || '?')} F${fiber0 + 1}`;
   };
   const assigning = (target) => splitterAssign && splitterAssign.splitterId === sp.id && splitterAssign.target === target;
+  // In "Connected" view, show only the ports that are actually bound (like cables show only connected fibers).
+  const connectedOnly = state.fiberFilter === 'connected';
+  const inputBound = sp.input_cable_id != null && sp.input_fiber != null;
   let html = `<div class="cable" style="border-left:3px solid #ff9800;">
     <div class="cable-hdr" style="cursor:default;">
       <span>🌳 ${h(sp.name)} · <span class="dir-badge" style="background:#fff3e0;color:#e65100;">${h(badge)}</span></span>
       <span style="display:flex;gap:4px;align-items:center;">${sideBtn}<button class="icon-btn" onclick="deleteSplitter(${sp.id})" title="Delete">🗑</button></span>
-    </div>
-    <div class="sd-splrow ${assigning('input') ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},'input')" title="Click, then a fiber, to bind the input">
+    </div>`;
+  if (!connectedOnly || inputBound) {
+    html += `<div class="sd-splrow ${assigning('input') ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},'input')" title="Click, then a fiber, to bind the input">
       <span class="splrow-label">IN</span>
       <span class="splrow-val">${boundLabel(sp.input_cable_id, sp.input_fiber)}</span>
       <span class="sd-port" id="splport-${sp.id}-in" data-side="${side}"></span>
     </div>`;
+  }
   (sp.outputs || []).forEach(o => {
+    const legBound = o.output_cable_id != null && o.output_fiber != null;
+    if (connectedOnly && !legBound) return;
     const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
     const loss = o.loss_db != null ? ` <span style="color:#1565c0;">−${(+o.loss_db).toFixed(1)}dB</span>` : '';
     html += `<div class="sd-splrow ${assigning(o.leg_index) ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},${o.leg_index})" title="Click, then a fiber, to bind this leg">
@@ -3810,6 +3817,9 @@ function renderSplitterBox(sp, side, c) {
       <span class="sd-port" id="splport-${sp.id}-leg-${o.leg_index}" data-side="${side}"></span>
     </div>`;
   });
+  if (connectedOnly && !inputBound && !(sp.outputs || []).some(o => o.output_cable_id != null && o.output_fiber != null)) {
+    html += `<div class="sd-splrow" style="cursor:default;color:#aaa;">No connected ports</div>`;
+  }
   html += '</div>';
   return html;
 }
