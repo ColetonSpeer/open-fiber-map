@@ -490,13 +490,32 @@ app.get('/api/closures/:id/splices', requireAuth, async (req, res) => {
   }
 });
 
+const SPLICE_TYPES = ['fusion', 'pass-through'];
+
 app.post('/api/splices', requireAuth, async (req, res) => {
   try {
     const { closure_id, from_cable_id, from_fiber, to_cable_id, to_fiber, splice_type, notes } = req.body;
+    const type = SPLICE_TYPES.includes(splice_type) ? splice_type : 'fusion';
     const result = await pool.query(`
       INSERT INTO splices (closure_id, from_cable_id, from_fiber, to_cable_id, to_fiber, splice_type, notes)
       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
-    `, [closure_id, from_cable_id, from_fiber, to_cable_id, to_fiber, splice_type || 'fusion', notes || null]);
+    `, [closure_id, from_cable_id, from_fiber, to_cable_id, to_fiber, type, notes || null]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/splices/:id', requireAuth, async (req, res) => {
+  try {
+    const { splice_type } = req.body;
+    if (!SPLICE_TYPES.includes(splice_type)) return res.status(400).json({ error: 'Invalid splice_type' });
+    const result = await pool.query(
+      'UPDATE splices SET splice_type=$1 WHERE id=$2 RETURNING *',
+      [splice_type, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -1667,9 +1686,11 @@ app.get('/api/trace', requireAuth, async (req, res) => {
     for (const s of splicesR.rows) {
       const a = cableNode(s.from_cable_id, s.from_fiber + 1);
       const b = cableNode(s.to_cable_id, s.to_fiber + 1);
+      // Glass-through (pass-through) fiber is continuous/uncut → ~0 dB; fusion ≈ 0.1 dB.
+      const spliceLoss = s.splice_type === 'pass-through' ? 0 : LOSS_SPLICE;
       addEdge(a, b, {
-        kind: 'splice', loss_db: LOSS_SPLICE, closure_id: s.closure_id,
-        label: `Splice (${s.splice_type})${s.closure_name ? ' @ ' + s.closure_name : ''}: f${s.from_fiber + 1} → f${s.to_fiber + 1}`,
+        kind: 'splice', loss_db: spliceLoss, closure_id: s.closure_id,
+        label: `${s.splice_type === 'pass-through' ? 'Glass-through' : 'Splice'} (${s.splice_type})${s.closure_name ? ' @ ' + s.closure_name : ''}: f${s.from_fiber + 1} → f${s.to_fiber + 1}`,
       });
     }
 

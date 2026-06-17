@@ -42,7 +42,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 /* Main area */
 #main { display: flex; flex: 1; overflow: hidden; }
 #map { flex: 1; }
-#side-panel { width: 360px; background: white; border-left: 1px solid #e0e0e0; overflow-y: auto; display: none; }
+#side-panel { width: 480px; max-width: 92vw; background: white; border-left: 1px solid #e0e0e0; overflow-y: auto; display: none; }
 #side-panel.open { display: block; }
 .panel-header { padding: 12px 14px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
 .panel-header h2 { font-size: 15px; font-weight: 600; }
@@ -92,6 +92,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .splice-item:last-child { border-bottom: none; }
 .splice-item .del-btn { margin-left: auto; background: none; border: none; cursor: pointer; color: #888; font-size: 14px; padding: 1px 4px; }
 .splice-item .del-btn:hover { color: #c62828; }
+.splice-item.sel { background: #e3f2fd; }
+.splice-item .type-btn { background: none; border: none; cursor: pointer; color: #888; font-size: 13px; padding: 1px 4px; }
+.splice-item .type-btn:hover { color: #1565c0; }
+.splice-type-glyph { font-weight: 700; color: #555; }
+
+/* Splice-tray diagram */
+.sd-typebar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11px; color: #666; border-bottom: 1px solid #eee; }
+.sd-typebtn { font-size: 11px; padding: 3px 9px; border: 1px solid #ccc; border-radius: 12px; background: white; cursor: pointer; color: #555; }
+.sd-typebtn.active { background: #1565c0; border-color: #1565c0; color: white; }
+.sd-diagram { position: relative; display: flex; gap: 52px; padding: 6px 6px 2px; }
+.sd-col { flex: 1 1 0; min-width: 0; }
+.sd-col-empty { font-size: 11px; color: #aaa; text-align: center; padding: 16px 4px; border: 1px dashed #e0e0e0; border-radius: 6px; }
+.sd-diagram .cable { margin: 6px 0; }
+.sd-diagram .fiber-row { position: relative; }
+.sd-diagram .cable-hdr, .sd-diagram .tube-label { position: relative; }
+.sd-col.right .fiber-row { flex-direction: row-reverse; text-align: right; }
+.sd-col.right .fiber-row .conn-info { margin-left: 0; margin-right: auto; }
+.sd-port { position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%; background: #b0bec5; transform: translateY(-50%); pointer-events: none; }
+.sd-col.left .sd-port  { right: -5px; }
+.sd-col.right .sd-port { left: -5px; }
+.sd-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; z-index: 5; }
+.sd-svg path { pointer-events: stroke; cursor: pointer; }
+.sd-side-btn { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; color: #888; font-size: 10px; padding: 0 4px; line-height: 16px; }
+.sd-side-btn:hover { color: #1565c0; border-color: #1565c0; }
+body.dark-mode .sd-typebtn { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
+body.dark-mode .sd-typebtn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+body.dark-mode .sd-port { background: #5b6b7a; }
+body.dark-mode .sd-col-empty { border-color: #374151; color: #6b7280; }
+body.dark-mode .splice-item.sel { background: #1e3a5f; }
 
 /* Modals */
 .modal-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
@@ -431,6 +460,8 @@ let state = {
   routeLine: null,
   selectedClosure: null,
   selectedFiber: null,
+  selectedSplice: null,
+  spliceType: 'fusion',
   showAddCable: false,
   showLinkClosure: false,
   closureMarkers: {},
@@ -3356,6 +3387,7 @@ async function openClosurePanel(closureId) {
   }
   state.selectedClosure = closureId;
   state.selectedFiber = null;
+  state.selectedSplice = null;
   state.showAddCable = false;
   state.showAddSplitter = false;
   splitterAssign = null;
@@ -3367,6 +3399,7 @@ function closePanel() {
   document.getElementById('side-panel').classList.remove('open');
   state.selectedClosure = null;
   state.selectedFiber = null;
+  state.selectedSplice = null;
   splitterAssign = null;
 }
 
@@ -3430,7 +3463,7 @@ function renderPanel() {
     const fc = FIBER_COLORS[sel.fiberIdx % 12];
     html += `<div class="sel-bar">
       <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
-      <span>${h(sc?.name)} F${sel.fiberIdx + 1} (${fc.name}) — click another fiber to splice</span>
+      <span>${h(sc?.name)} F${sel.fiberIdx + 1} (${fc.name}) — click another fiber to ${state.spliceType === 'pass-through' ? 'connect (glass-through)' : 'fusion-splice'}</span>
       <button onclick="state.selectedFiber=null;renderPanel();">×</button>
     </div>`;
   }
@@ -3444,61 +3477,11 @@ function renderPanel() {
     }
   }
 
-  html += '<div class="section-title">Cables</div>';
-
-  c.cables.forEach(cable => {
-    const tubes = Math.ceil(cable.fiber_count / 12);
-    const isExpanded = panelState.expandedCables.has(cable.id);
-    const chevron = isExpanded ? '▼' : '▶';
-    const dirBadge = cable.link_closure_id
-      ? (() => {
-          const linked = state.closures.find(cl => cl.id === cable.link_closure_id);
-          return `<span class="dir-badge" style="background:#f3e5f5;color:#6a1b9a;">↔ ${linked ? h(linked.name) : 'Link'}</span>`;
-        })()
-      : `<span class="dir-badge dir-${h(cable.direction)}">${h(cable.direction)}</span>`;
-    html += `<div class="cable">
-      <div class="cable-hdr" onclick="toggleCable(${cable.id})">
-        <span>${chevron} ${h(cable.name)} · ${cable.fiber_count}F · ${dirBadge}</span>
-        <button class="icon-btn" onclick="event.stopPropagation();deleteCable(${cable.id})" title="Delete">🗑</button>
-      </div>`;
-    if (isExpanded) {
-      for (let t = 0; t < tubes; t++) {
-        const inTube = Math.min(12, cable.fiber_count - t * 12);
-        const tubeKey = `${cable.id}-${t}`;
-        const isTubeExpanded = panelState.expandedTubes.has(tubeKey);
-        if (tubes > 1) {
-          const tc = FIBER_COLORS[t % 12];
-          const tChevron = isTubeExpanded ? '▼' : '▶';
-          html += `<div class="tube-label" onclick="toggleTube(${cable.id}, ${t})" style="cursor:pointer;user-select:none;">${tChevron} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tc.bg};border:1px solid ${tc.border};vertical-align:middle;margin-right:2px;"></span>${tc.name} tube (${inTube}F)</div>`;
-        }
-        if (tubes === 1 || isTubeExpanded) {
-          for (let f = 0; f < inTube; f++) {
-            const fi = t * 12 + f;
-            const fc = FIBER_COLORS[f % 12];
-            const key = `${cable.id}-${fi}`;
-            const isConn = connSet.has(key);
-            const isSel = sel && sel.cableId === cable.id && sel.fiberIdx === fi;
-            const sinfo = c.splices.find(s =>
-              (s.from_cable_id === cable.id && s.from_fiber === fi) ||
-              (s.to_cable_id === cable.id && s.to_fiber === fi)
-            );
-            let connLbl = '';
-            if (sinfo) {
-              const oId = sinfo.from_cable_id === cable.id ? sinfo.to_cable_id : sinfo.from_cable_id;
-              const oF = sinfo.from_cable_id === cable.id ? sinfo.to_fiber : sinfo.from_fiber;
-              const oC = c.cables.find(x => x.id === oId);
-              connLbl = `<span class="conn-info">→ ${h(oC?.name || '?')} F${oF + 1}</span>`;
-            }
-            html += `<div class="fiber-row ${isSel ? 'selected' : ''} ${isConn && !isSel ? 'connected' : ''}" onclick="selectFiber(${cable.id}, ${fi})">
-              <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
-              <span class="fiber-name">F${fi + 1} · ${fc.name}</span>${connLbl}
-            </div>`;
-          }
-        }
-      }
-    }
-    html += '</div>';
-  });
+  html += `<div class="sd-typebar">Splice type:
+    <button class="sd-typebtn ${state.spliceType === 'fusion' ? 'active' : ''}" onclick="setNewSpliceType('fusion')">◆ Fusion</button>
+    <button class="sd-typebtn ${state.spliceType === 'pass-through' ? 'active' : ''}" onclick="setNewSpliceType('pass-through')">┄ Glass-through</button>
+  </div>`;
+  html += renderSpliceDiagram(c, sel, connSet);
 
   if (state.showAddCable) {
     if (c.pole_id) {
@@ -3580,13 +3563,18 @@ function renderPanel() {
       const tC = c.cables.find(x => x.id === s.to_cable_id);
       const fFc = FIBER_COLORS[s.from_fiber % 12];
       const tFc = FIBER_COLORS[s.to_fiber % 12];
-      html += `<div class="splice-item">
+      const isPass = s.splice_type === 'pass-through';
+      const glyph = isPass
+        ? `<span class="splice-type-glyph" title="Glass-through (uncut)">┄</span>`
+        : `<span class="splice-type-glyph" title="Fusion splice">◆</span>`;
+      html += `<div class="splice-item ${s.id === state.selectedSplice ? 'sel' : ''}">
         <span class="fiber-dot" style="background:${fFc.bg};border:1.5px solid ${fFc.border};width:10px;height:10px;"></span>
         <span>${h(fC?.name || '?')} F${s.from_fiber + 1}</span>
-        <span style="color:#888;">↔</span>
+        ${glyph}
         <span class="fiber-dot" style="background:${tFc.bg};border:1.5px solid ${tFc.border};width:10px;height:10px;"></span>
         <span>${h(tC?.name || '?')} F${s.to_fiber + 1}</span>
-        <button class="del-btn" onclick="deleteSplice(${s.id})" title="Remove">🗑</button>
+        <button class="type-btn" onclick="toggleSpliceType(${s.id})" title="Toggle fusion / glass-through" style="margin-left:auto;">⇄</button>
+        <button class="del-btn" onclick="deleteSplice(${s.id})" title="Remove" style="margin-left:0;">🗑</button>
       </div>`;
     });
     html += '</div>';
@@ -3599,7 +3587,161 @@ function renderPanel() {
   </div>`;
 
   document.getElementById('side-panel').innerHTML = html;
+  requestAnimationFrame(drawSpliceLines);
 }
+
+// ── Splice-tray diagram ───────────────────────────────────────────────────────
+function cableSide(cable) {
+  const ls = localStorage.getItem('ofm-cable-side-' + cable.id);
+  if (ls === 'L' || ls === 'R') return ls;
+  return cable.direction === 'OUT' ? 'R' : 'L';   // IN / link / unset default to left
+}
+
+function toggleCableSide(cableId) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const cab = c && c.cables.find(x => x.id === cableId);
+  if (!cab) return;
+  localStorage.setItem('ofm-cable-side-' + cableId, cableSide(cab) === 'L' ? 'R' : 'L');
+  renderPanel();
+}
+
+function setNewSpliceType(t) { state.spliceType = t; renderPanel(); }
+
+function renderCableBox(cable, side, c, sel, connSet) {
+  const tubes = Math.ceil(cable.fiber_count / 12);
+  const isExpanded = panelState.expandedCables.has(cable.id);
+  const chevron = isExpanded ? '▼' : '▶';
+  const dirBadge = cable.link_closure_id
+    ? (() => {
+        const linked = state.closures.find(cl => cl.id === cable.link_closure_id);
+        return `<span class="dir-badge" style="background:#f3e5f5;color:#6a1b9a;">↔ ${linked ? h(linked.name) : 'Link'}</span>`;
+      })()
+    : `<span class="dir-badge dir-${h(cable.direction)}">${h(cable.direction)}</span>`;
+  const sideBtn = `<button class="sd-side-btn" title="Move to other side" onclick="event.stopPropagation();toggleCableSide(${cable.id})">${side === 'L' ? '▶' : '◀'}</button>`;
+  let html = `<div class="cable">
+    <div class="cable-hdr" onclick="toggleCable(${cable.id})">
+      <span>${chevron} ${h(cable.name)} · ${cable.fiber_count}F · ${dirBadge}</span>
+      <span style="display:flex;gap:4px;align-items:center;">${sideBtn}<button class="icon-btn" onclick="event.stopPropagation();deleteCable(${cable.id})" title="Delete">🗑</button></span>
+      <span class="sd-port" id="cablehdrport-${cable.id}" data-side="${side}"></span>
+    </div>`;
+  if (isExpanded) {
+    for (let t = 0; t < tubes; t++) {
+      const inTube = Math.min(12, cable.fiber_count - t * 12);
+      const isTubeExpanded = panelState.expandedTubes.has(`${cable.id}-${t}`);
+      if (tubes > 1) {
+        const tc = FIBER_COLORS[t % 12];
+        const tChevron = isTubeExpanded ? '▼' : '▶';
+        html += `<div class="tube-label" onclick="toggleTube(${cable.id}, ${t})" style="cursor:pointer;user-select:none;">${tChevron} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tc.bg};border:1px solid ${tc.border};vertical-align:middle;margin-right:2px;"></span>${tc.name} tube (${inTube}F)<span class="sd-port" id="tubehdrport-${cable.id}-${t}" data-side="${side}"></span></div>`;
+      }
+      if (tubes === 1 || isTubeExpanded) {
+        for (let f = 0; f < inTube; f++) {
+          const fi = t * 12 + f;
+          const fc = FIBER_COLORS[f % 12];
+          const isConn = connSet.has(`${cable.id}-${fi}`);
+          const isSel = sel && sel.cableId === cable.id && sel.fiberIdx === fi;
+          html += `<div class="fiber-row ${isSel ? 'selected' : ''} ${isConn && !isSel ? 'connected' : ''}" onclick="selectFiber(${cable.id}, ${fi})">
+            <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
+            <span class="fiber-name">F${fi + 1} · ${fc.name}</span>
+            <span class="sd-port" id="port-${cable.id}-${fi}" data-side="${side}"></span>
+          </div>`;
+        }
+      }
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderSpliceDiagram(c, sel, connSet) {
+  const left = [], right = [];
+  c.cables.forEach(cab => (cableSide(cab) === 'R' ? right : left).push(cab));
+  const col = (cables, side) => cables.length
+    ? cables.map(cab => renderCableBox(cab, side, c, sel, connSet)).join('')
+    : `<div class="sd-col-empty">No cables on this side.<br>Use ◀ / ▶ on a cable to move it here.</div>`;
+  return `<div class="section-title">Splice tray</div>
+    <div class="sd-diagram" id="sd-diagram">
+      <div class="sd-col left">${col(left, 'L')}</div>
+      <div class="sd-col right">${col(right, 'R')}</div>
+      <svg class="sd-svg" id="sd-svg"></svg>
+    </div>`;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// Draw connector lines between spliced fiber ports. Anchors fall back to the
+// tube header, then the cable header, when a fiber's row is collapsed.
+function drawSpliceLines() {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const diagram = document.getElementById('sd-diagram');
+  const svg = document.getElementById('sd-svg');
+  if (!c || !diagram || !svg) return;
+  const dRect = diagram.getBoundingClientRect();
+  const W = diagram.offsetWidth, H = diagram.offsetHeight;
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const anchor = (cableId, fiberIdx) => {
+    let el = document.getElementById(`port-${cableId}-${fiberIdx}`);
+    if (!el) el = document.getElementById(`tubehdrport-${cableId}-${Math.floor(fiberIdx / 12)}`);
+    if (!el) el = document.getElementById(`cablehdrport-${cableId}`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - dRect.left, y: r.top + r.height / 2 - dRect.top, side: el.dataset.side };
+  };
+
+  (c.splices || []).forEach(s => {
+    const a = anchor(s.from_cable_id, s.from_fiber);
+    const b = anchor(s.to_cable_id, s.to_fiber);
+    if (!a || !b) return;
+    const fc = FIBER_COLORS[s.from_fiber % 12];
+    const isPass = s.splice_type === 'pass-through';
+    const isSel = s.id === state.selectedSplice;
+    const off = a.side === b.side ? 60 : Math.max(40, Math.abs(b.x - a.x) * 0.4);
+    const c1x = a.x + (a.side === 'L' ? off : -off);
+    const c2x = b.x + (b.side === 'L' ? off : -off);
+
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', fc.bg);
+    path.setAttribute('stroke-width', isSel ? 4 : 2.25);
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('opacity', isSel ? 1 : 0.9);
+    if (isPass) path.setAttribute('stroke-dasharray', '5 4');
+    path.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.selectedSplice = (state.selectedSplice === s.id) ? null : s.id;
+      renderPanel();
+    });
+    svg.appendChild(path);
+
+    if (!isPass) {
+      // Fusion joint node at the bezier midpoint (t = 0.5)
+      const mx = 0.125 * a.x + 0.375 * c1x + 0.375 * c2x + 0.125 * b.x;
+      const my = 0.5 * (a.y + b.y);
+      const node = document.createElementNS(SVG_NS, 'rect');
+      node.setAttribute('x', mx - 4); node.setAttribute('y', my - 4);
+      node.setAttribute('width', 8); node.setAttribute('height', 8);
+      node.setAttribute('transform', `rotate(45 ${mx} ${my})`);
+      node.setAttribute('fill', fc.bg);
+      node.setAttribute('stroke', fc.border);
+      node.setAttribute('stroke-width', 1.5);
+      svg.appendChild(node);
+    }
+  });
+}
+
+let _spliceResizeBound = false;
+function bindSpliceResize() {
+  if (_spliceResizeBound) return;
+  _spliceResizeBound = true;
+  window.addEventListener('resize', () => {
+    if (state.selectedClosure && document.getElementById('sd-diagram')) drawSpliceLines();
+  });
+}
+bindSpliceResize();
 
 // Builds a 1-line description of a cable fiber, or an Assign button if unset
 function fiberRefLabel(c, cableId, fiber0, onAssign) {
@@ -3764,7 +3906,8 @@ async function selectFiber(cableId, fiberIdx) {
         const splice = await api('POST', '/splices', {
           closure_id: c.id,
           from_cable_id: sel.cableId, from_fiber: sel.fiberIdx,
-          to_cable_id: cableId, to_fiber: fiberIdx
+          to_cable_id: cableId, to_fiber: fiberIdx,
+          splice_type: state.spliceType
         });
         c.splices.push(splice);
       } catch (err) { alert('Failed: ' + err.message); }
@@ -3784,6 +3927,19 @@ async function deleteSplice(spliceId) {
     await api('DELETE', '/splices/' + spliceId);
     const c = state.closures.find(x => x.id === state.selectedClosure);
     c.splices = c.splices.filter(s => s.id !== spliceId);
+    if (state.selectedSplice === spliceId) state.selectedSplice = null;
+    renderPanel();
+  } catch (err) { alert('Failed: ' + err.message); }
+}
+
+async function toggleSpliceType(spliceId) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const s = c && c.splices.find(x => x.id === spliceId);
+  if (!s) return;
+  const next = s.splice_type === 'pass-through' ? 'fusion' : 'pass-through';
+  try {
+    const updated = await api('PUT', '/splices/' + spliceId, { splice_type: next });
+    Object.assign(s, updated);
     renderPanel();
   } catch (err) { alert('Failed: ' + err.message); }
 }
