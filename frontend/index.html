@@ -61,10 +61,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .dir-IN { background: #e3f2fd; color: #1565c0; }
 .dir-OUT { background: #e8f5e9; color: #2e7d32; }
 .tube-label { font-size: 10px; color: #888; padding: 3px 10px; background: #fafafa; border-top: 1px solid #f0f0f0; }
-.fiber-row { display: flex; align-items: center; gap: 7px; padding: 4px 10px; cursor: pointer; }
+.fiber-row { display: flex; align-items: center; gap: 7px; padding: 4px 10px; cursor: pointer; user-select: none; }
 .fiber-row:hover { background: #f8f8fa; }
 .fiber-row.selected { background: #e3f2fd; outline: 1.5px solid #1565c0; }
+.fiber-row.selected-b { background: #e8f5e9; outline: 1.5px solid #2e7d32; }
 .fiber-row.connected .fiber-dot { opacity: 0.5; }
+body.dark-mode .fiber-row.selected { background: #1e3a5f; }
+body.dark-mode .fiber-row.selected-b { background: #163a26; }
 .fiber-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
 .fiber-name { font-size: 12px; color: #333; }
 .conn-info { font-size: 10px; color: #888; margin-left: auto; display: flex; align-items: center; gap: 4px; }
@@ -459,7 +462,7 @@ let state = {
   routePoints: [],
   routeLine: null,
   selectedClosure: null,
-  selectedFiber: null,
+  spliceSel: { a: null, b: null },   // mass-connect: each side = {cableId, fibers:[], anchor}
   selectedSplice: null,
   spliceType: 'fusion',
   showAddCable: false,
@@ -3386,7 +3389,7 @@ async function openClosurePanel(closureId) {
     panelState.expandedTubes.clear();
   }
   state.selectedClosure = closureId;
-  state.selectedFiber = null;
+  state.spliceSel = { a: null, b: null };
   state.selectedSplice = null;
   state.showAddCable = false;
   state.showAddSplitter = false;
@@ -3398,7 +3401,7 @@ async function openClosurePanel(closureId) {
 function closePanel() {
   document.getElementById('side-panel').classList.remove('open');
   state.selectedClosure = null;
-  state.selectedFiber = null;
+  state.spliceSel = { a: null, b: null };
   state.selectedSplice = null;
   splitterAssign = null;
 }
@@ -3413,7 +3416,7 @@ function renderPanel() {
     connSet.add(`${s.to_cable_id}-${s.to_fiber}`);
   });
 
-  const sel = state.selectedFiber;
+  const sel = state.spliceSel;
   let html = `
     <div class="panel-header">
       <div>
@@ -3458,24 +3461,39 @@ function renderPanel() {
       <span>🌳 Assigning ${h(sp?.name || 'splitter')} ${tgt} — click a fiber to bind it</span>
       <button onclick="splitterAssign=null;renderPanel();">×</button>
     </div>`;
-  } else if (sel) {
-    const sc = c.cables.find(x => x.id === sel.cableId);
-    const fc = FIBER_COLORS[sel.fiberIdx % 12];
-    html += `<div class="sel-bar">
-      <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
-      <span>${h(sc?.name)} F${sel.fiberIdx + 1} (${fc.name}) — click another fiber to ${state.spliceType === 'pass-through' ? 'connect (glass-through)' : 'fusion-splice'}</span>
-      <button onclick="state.selectedFiber=null;renderPanel();">×</button>
+  } else if (sel.a || sel.b) {
+    const sideSummary = (s) => {
+      if (!s) return '<em style="opacity:.6">—</em>';
+      const cab = c.cables.find(x => x.id === s.cableId);
+      const list = s.fibers.length <= 4
+        ? s.fibers.map(f => 'F' + (f + 1)).join(', ')
+        : `F${s.fibers[0] + 1}–F${s.fibers[s.fibers.length - 1] + 1} (${s.fibers.length})`;
+      return `${h(cab?.name || '?')} · ${list}`;
+    };
+    const na = sel.a ? sel.a.fibers.length : 0;
+    const nb = sel.b ? sel.b.fibers.length : 0;
+    let hint;
+    if (!sel.b) hint = 'select fibers on another cable';
+    else if (na === nb) hint = 'connecting…';
+    else hint = na > nb ? `select ${na - nb} more on ${h(c.cables.find(x => x.id === sel.b.cableId)?.name || 'side B')}`
+                        : `${nb - na} extra on side B — deselect or add to side A`;
+    const verb = state.spliceType === 'pass-through' ? 'glass-through' : 'fusion';
+    html += `<div class="sel-bar" style="flex-wrap:wrap;">
+      <span><b>A:</b> ${sideSummary(sel.a)} &nbsp; <b>B:</b> ${sideSummary(sel.b)}</span>
+      <button onclick="state.spliceSel={a:null,b:null};renderPanel();" title="Clear selection">×</button>
+      <span style="flex-basis:100%;font-size:10px;opacity:.8;">${na || nb} per side will ${verb}-connect when counts match · Shift-click = range · Ctrl-click = toggle — ${hint}</span>
     </div>`;
   }
 
-  // Auto-expand cable/tube containing selected fiber
-  if (sel) {
-    panelState.expandedCables.add(sel.cableId);
-    const selCable = c.cables.find(x => x.id === sel.cableId);
-    if (selCable && Math.ceil(selCable.fiber_count / 12) > 1) {
-      panelState.expandedTubes.add(`${sel.cableId}-${Math.floor(sel.fiberIdx / 12)}`);
+  // Auto-expand cables/tubes containing any selected fiber so their ports render
+  [sel.a, sel.b].forEach(s => {
+    if (!s) return;
+    panelState.expandedCables.add(s.cableId);
+    const cab = c.cables.find(x => x.id === s.cableId);
+    if (cab && Math.ceil(cab.fiber_count / 12) > 1) {
+      s.fibers.forEach(f => panelState.expandedTubes.add(`${s.cableId}-${Math.floor(f / 12)}`));
     }
-  }
+  });
 
   html += `<div class="sd-typebar">Splice type:
     <button class="sd-typebtn ${state.spliceType === 'fusion' ? 'active' : ''}" onclick="setNewSpliceType('fusion')">◆ Fusion</button>
@@ -3638,8 +3656,10 @@ function renderCableBox(cable, side, c, sel, connSet) {
           const fi = t * 12 + f;
           const fc = FIBER_COLORS[f % 12];
           const isConn = connSet.has(`${cable.id}-${fi}`);
-          const isSel = sel && sel.cableId === cable.id && sel.fiberIdx === fi;
-          html += `<div class="fiber-row ${isSel ? 'selected' : ''} ${isConn && !isSel ? 'connected' : ''}" onclick="selectFiber(${cable.id}, ${fi})">
+          const inA = sel.a && sel.a.cableId === cable.id && sel.a.fibers.includes(fi);
+          const inB = sel.b && sel.b.cableId === cable.id && sel.b.fibers.includes(fi);
+          const selCls = inA ? 'selected' : (inB ? 'selected-b' : '');
+          html += `<div class="fiber-row ${selCls} ${isConn && !selCls ? 'connected' : ''}" onclick="selectFiber(${cable.id}, ${fi}, event)">
             <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
             <span class="fiber-name">F${fi + 1} · ${fc.name}</span>
             <span class="sd-port" id="port-${cable.id}-${fi}" data-side="${side}"></span>
@@ -3731,6 +3751,30 @@ function drawSpliceLines() {
       svg.appendChild(node);
     }
   });
+
+  // Pending-pair preview: faint dashed lines for the in-order pairs being built.
+  const sel = state.spliceSel;
+  if (sel.a && sel.b && sel.a.fibers.length && sel.b.fibers.length) {
+    const aF = [...sel.a.fibers].sort((x, y) => x - y);
+    const bF = [...sel.b.fibers].sort((x, y) => x - y);
+    const pairs = Math.min(aF.length, bF.length);
+    for (let i = 0; i < pairs; i++) {
+      const a = anchor(sel.a.cableId, aF[i]);
+      const b = anchor(sel.b.cableId, bF[i]);
+      if (!a || !b) continue;
+      const off = a.side === b.side ? 60 : Math.max(40, Math.abs(b.x - a.x) * 0.4);
+      const c1x = a.x + (a.side === 'L' ? off : -off);
+      const c2x = b.x + (b.side === 'L' ? off : -off);
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', '#9ca3af');
+      path.setAttribute('stroke-width', 1.5);
+      path.setAttribute('stroke-dasharray', '3 4');
+      path.setAttribute('opacity', '0.7');
+      svg.appendChild(path);
+    }
+  }
 }
 
 let _spliceResizeBound = false;
@@ -3855,7 +3899,7 @@ async function doAddSplitter() {
 
 function beginSplitterAssign(splitterId, target) {
   splitterAssign = { splitterId, target };
-  state.selectedFiber = null;
+  state.spliceSel = { a: null, b: null };
   renderPanel();
 }
 
@@ -3889,36 +3933,90 @@ async function deleteSplitter(id) {
   } catch (err) { alert('Failed: ' + err.message); }
 }
 
-async function selectFiber(cableId, fiberIdx) {
-  const c = state.closures.find(x => x.id === state.selectedClosure);
+// Which selection side a cable belongs to (or should start). Returns 'a'|'b'|null.
+function sideForCable(cableId) {
+  const sel = state.spliceSel;
+  if (sel.a && sel.a.cableId === cableId) return 'a';
+  if (sel.b && sel.b.cableId === cableId) return 'b';
+  if (!sel.a) return 'a';
+  if (!sel.b) return 'b';
+  return null; // both sides taken by other cables
+}
+
+function selectFiber(cableId, fiberIdx, event) {
   if (splitterAssign) { return assignSplitterFiber(cableId, fiberIdx); }
-  const sel = state.selectedFiber;
-  if (sel && sel.cableId !== cableId) {
-    // Create splice
-    const dup = c.splices.find(s =>
-      (s.from_cable_id === sel.cableId && s.from_fiber === sel.fiberIdx) ||
-      (s.to_cable_id === sel.cableId && s.to_fiber === sel.fiberIdx) ||
-      (s.from_cable_id === cableId && s.from_fiber === fiberIdx) ||
-      (s.to_cable_id === cableId && s.to_fiber === fiberIdx)
-    );
-    if (!dup) {
-      try {
-        const splice = await api('POST', '/splices', {
-          closure_id: c.id,
-          from_cable_id: sel.cableId, from_fiber: sel.fiberIdx,
-          to_cable_id: cableId, to_fiber: fiberIdx,
-          splice_type: state.spliceType
-        });
-        c.splices.push(splice);
-      } catch (err) { alert('Failed: ' + err.message); }
-    }
-    state.selectedFiber = null;
-  } else if (sel && sel.cableId === cableId && sel.fiberIdx === fiberIdx) {
-    state.selectedFiber = null;
-  } else {
-    state.selectedFiber = { cableId, fiberIdx };
+  const sel = state.spliceSel;
+  const shift = event && event.shiftKey;
+  const toggle = event && (event.ctrlKey || event.metaKey);
+
+  let key = sideForCable(cableId);
+  if (key === null) {                 // both sides are other cables → start fresh A here
+    state.spliceSel = { a: null, b: null };
+    key = 'a';
   }
+  let s = sel[key];
+  if (!s || s.cableId !== cableId) { s = sel[key] = { cableId, fibers: [], anchor: fiberIdx }; }
+
+  if (shift) {
+    const lo = Math.min(s.anchor ?? fiberIdx, fiberIdx);
+    const hi = Math.max(s.anchor ?? fiberIdx, fiberIdx);
+    s.fibers = [];
+    for (let i = lo; i <= hi; i++) s.fibers.push(i);
+    if (s.anchor == null) s.anchor = fiberIdx;
+  } else if (toggle) {
+    const i = s.fibers.indexOf(fiberIdx);
+    if (i >= 0) s.fibers.splice(i, 1); else s.fibers.push(fiberIdx);
+    s.anchor = fiberIdx;
+    if (!s.fibers.length) sel[key] = null;
+  } else {
+    // plain click: toggle-off if it's the lone member, else re-anchor to just this fiber
+    if (s.fibers.length === 1 && s.fibers[0] === fiberIdx) sel[key] = null;
+    else { s.fibers = [fiberIdx]; s.anchor = fiberIdx; }
+  }
+
+  maybeAutoConnect();
   renderPanel();
+}
+
+// When both sides hold an equal number of fibers, connect them pairwise (ascending).
+async function maybeAutoConnect() {
+  const sel = state.spliceSel;
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c || !sel.a || !sel.b) return;
+  const n = sel.a.fibers.length;
+  if (n < 1 || sel.b.fibers.length !== n) return;
+
+  const aF = [...sel.a.fibers].sort((x, y) => x - y);
+  const bF = [...sel.b.fibers].sort((x, y) => x - y);
+  const aCable = sel.a.cableId, bCable = sel.b.cableId;
+  state.spliceSel = { a: null, b: null };   // consume the selection up front
+
+  const taken = (cab, fi) => c.splices.some(s =>
+    (s.from_cable_id === cab && s.from_fiber === fi) || (s.to_cable_id === cab && s.to_fiber === fi));
+
+  let skipped = 0;
+  const jobs = [];
+  for (let i = 0; i < n; i++) {
+    if (taken(aCable, aF[i]) || taken(bCable, bF[i])) { skipped++; continue; }
+    jobs.push(api('POST', '/splices', {
+      closure_id: c.id,
+      from_cable_id: aCable, from_fiber: aF[i],
+      to_cable_id: bCable, to_fiber: bF[i],
+      splice_type: state.spliceType
+    }).then(sp => c.splices.push(sp)).catch(() => { skipped++; }));
+  }
+  try { await Promise.all(jobs); } catch (_) {}
+  renderPanel();
+  if (skipped) flashHint(`Connected ${n - skipped}, skipped ${skipped} (already spliced).`);
+}
+
+function flashHint(msg) {
+  const el = document.getElementById('mode-hint');
+  if (!el) return;
+  const prev = el.textContent;
+  el.style.color = document.body.classList.contains('dark-mode') ? '#fbbf24' : '#e65100';
+  el.textContent = msg;
+  setTimeout(() => { el.style.color = ''; el.textContent = prev; }, 3000);
 }
 
 async function deleteSplice(spliceId) {
@@ -4010,7 +4108,7 @@ async function deleteCable(cableId) {
     await api('DELETE', '/cables/' + cableId);
     c.cables = c.cables.filter(ca => ca.id !== cableId);
     c.splices = c.splices.filter(s => s.from_cable_id !== cableId && s.to_cable_id !== cableId);
-    state.selectedFiber = null;
+    state.spliceSel = { a: null, b: null };
     renderPanel();
     renderMap();
   } catch (err) { alert('Failed: ' + err.message); }
