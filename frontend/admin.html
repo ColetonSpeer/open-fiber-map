@@ -80,10 +80,10 @@
   body.dark-mode .icon-btn { color: #9ca3af; }
   body.dark-mode .icon-btn:hover { background: #374151; }
 
-  /* Generic dark-mode fallbacks for hardcoded light inline styles
-     (e.g. port-group rows, builder buttons). Only affects dark mode. */
+  /* ===== Dark-mode fallbacks for hardcoded light inline styles ===== */
   body.dark-mode [style*="background:white"],
   body.dark-mode [style*="background: white"],
+  body.dark-mode [style*="background-color:white"],
   body.dark-mode [style*="background:#fff"],
   body.dark-mode [style*="background: #fff"],
   body.dark-mode [style*="background-color:#fff"],
@@ -94,29 +94,59 @@
   body.dark-mode [style*="background:#f8f9fa"],
   body.dark-mode [style*="background:#f7f7f7"],
   body.dark-mode [style*="background:#f5f5f5"],
+  body.dark-mode [style*="background:#f5f5f7"],
+  body.dark-mode [style*="background:#f5f7fa"],
+  body.dark-mode [style*="background:#f4f6f8"],
   body.dark-mode [style*="background:#f0f0f0"],
-  body.dark-mode [style*="background:#eee"] {
+  body.dark-mode [style*="background:#eee"],
+  body.dark-mode [style*="background:#e5e7eb"] {
     background-color: #1f2937 !important;
-    border-color: #374151 !important;
   }
-  /* Light-tinted status backgrounds → darker tints */
-  body.dark-mode [style*="background:#fff5f5"] { background-color: #3a1f1f !important; }
-  body.dark-mode [style*="background:#e8f5e9"],
-  body.dark-mode [style*="background:#e8f4fd"],
-  body.dark-mode [style*="background:#e3f2fd"] { background-color: #1e3a2e !important; }
-  /* Light inline borders → dark */
+  body.dark-mode [style*="background:#e3f2fd"],
+  body.dark-mode [style*="background:#e8f4fd"] { background-color:#13314f !important; border-color:#1e4976 !important; }
+  body.dark-mode [style*="background:#fff3e0"] { background-color:#3a2c17 !important; border-color:#5c4424 !important; }
+  body.dark-mode [style*="background:#e8eaf6"] { background-color:#262a45 !important; border-color:#3a3f63 !important; }
+  body.dark-mode [style*="background:#f3e5f5"],
+  body.dark-mode [style*="background:#f3eafc"] { background-color:#2e2540 !important; border-color:#473a5e !important; }
+  body.dark-mode [style*="background:#fff5f5"],
+  body.dark-mode [style*="background:#ffebee"],
+  body.dark-mode [style*="background:#fce4ec"] { background-color:#3a1f1f !important; border-color:#5c2b2b !important; }
+  body.dark-mode [style*="background:#efebe9"] { background-color:#2d2622 !important; }
+  body.dark-mode [style*="background:#e8f5e9"] { background-color:#163a26 !important; border-color:#235c3a !important; }
   body.dark-mode [style*="solid #ccc"],
   body.dark-mode [style*="solid #ddd"],
   body.dark-mode [style*="solid #eee"],
-  body.dark-mode [style*="solid #e0e0e0"] { border-color: #374151 !important; }
-  /* Dark inline text → light enough to read on a dark surface */
+  body.dark-mode [style*="solid #e0e0e0"],
+  body.dark-mode [style*="solid #d0d0d0"],
+  body.dark-mode [style*="solid #e8e8e8"],
+  body.dark-mode [style*="solid #bbb"],
+  body.dark-mode [style*="solid #f0f0f0"],
+  body.dark-mode [style*="solid #f5f5f7"] { border-color:#374151 !important; }
+  body.dark-mode [style*="color:#888"],
+  body.dark-mode [style*="color:#999"],
+  body.dark-mode [style*="color:#777"],
+  body.dark-mode [style*="color:#757575"],
+  body.dark-mode [style*="color:#9e9e9e"] { color:#9ca3af !important; }
   body.dark-mode [style*="color:#666"],
   body.dark-mode [style*="color:#555"],
   body.dark-mode [style*="color:#444"],
   body.dark-mode [style*="color:#333"],
   body.dark-mode [style*="color:#222"],
-  body.dark-mode [style*="color:#000"] { color: #cbd5e1 !important; }
-  /* Inputs/selects override inline light borders/backgrounds (skip checkbox/radio/color) */
+  body.dark-mode [style*="color:#212121"],
+  body.dark-mode [style*="color:#1d1d1f"],
+  body.dark-mode [style*="color:#1a1a2e"],
+  body.dark-mode [style*="color:#5d4037"],
+  body.dark-mode [style*="color:#000"] { color:#cbd5e1 !important; }
+  body.dark-mode [style*="color:#1565c0"],
+  body.dark-mode [style*="color:#1a237e"],
+  body.dark-mode [style*="color:#283593"] { color:#93c5fd !important; }
+  body.dark-mode [style*="color:#6a1b9a"],
+  body.dark-mode [style*="color:#4527a0"] { color:#c9b6f0 !important; }
+  body.dark-mode [style*="color:#880e4f"] { color:#f9a8d4 !important; }
+  body.dark-mode [style*="color:#1b5e20"],
+  body.dark-mode [style*="color:#2e7d32"] { color:#86efac !important; }
+  body.dark-mode [style*="color:#e65100"] { color:#ffb74d !important; }
+  body.dark-mode [style*="color:#c62828"] { color:#f87171 !important; }
   body.dark-mode input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]),
   body.dark-mode select, body.dark-mode textarea {
     background-color: #111827 !important; border-color: #4b5563 !important; color: #f3f4f6 !important;
