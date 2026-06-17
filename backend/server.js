@@ -496,6 +496,15 @@ app.post('/api/splices', requireAuth, async (req, res) => {
   try {
     const { closure_id, from_cable_id, from_fiber, to_cable_id, to_fiber, splice_type, notes } = req.body;
     const type = SPLICE_TYPES.includes(splice_type) ? splice_type : 'fusion';
+    // A fiber can only be in one splice — reject if either endpoint is already spliced.
+    const existing = await pool.query(
+      `SELECT 1 FROM splices
+       WHERE (from_cable_id=$1 AND from_fiber=$2) OR (to_cable_id=$1 AND to_fiber=$2)
+          OR (from_cable_id=$3 AND from_fiber=$4) OR (to_cable_id=$3 AND to_fiber=$4)
+       LIMIT 1`,
+      [from_cable_id, from_fiber, to_cable_id, to_fiber]
+    );
+    if (existing.rows.length) return res.status(409).json({ error: 'A fiber is already spliced' });
     const result = await pool.query(`
       INSERT INTO splices (closure_id, from_cable_id, from_fiber, to_cable_id, to_fiber, splice_type, notes)
       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *

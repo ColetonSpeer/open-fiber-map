@@ -127,6 +127,11 @@ body.dark-mode .sd-splrow.assigning { background: #3a2c17; }
 .sd-svg path { pointer-events: stroke; cursor: pointer; }
 .sd-side-btn { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; color: #888; font-size: 10px; padding: 0 4px; line-height: 16px; }
 .sd-side-btn:hover { color: #1565c0; border-color: #1565c0; }
+.sd-delbtn.active { background: #c62828; border-color: #c62828; color: #fff; }
+.sd-diagram.del-mode .fiber-row { cursor: pointer; }
+.sd-diagram.del-mode .fiber-row.connected:hover { background: #ffebee; outline: 1.5px solid #ef5350; }
+.sd-diagram.del-mode .sd-svg path { cursor: pointer; }
+body.dark-mode .sd-diagram.del-mode .fiber-row.connected:hover { background: #3a1f1f; outline-color: #ef5350; }
 body.dark-mode .sd-typebtn { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
 body.dark-mode .sd-typebtn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
 body.dark-mode .sd-port { background: #5b6b7a; }
@@ -474,6 +479,8 @@ let state = {
   selectedSplice: null,
   spliceType: 'fusion',
   fiberFilter: 'all',                // 'all' | 'connected' | 'splitter'
+  spliceDeleteMode: false,           // when on, clicking a fiber breaks its splice
+  _delAnchor: null,                  // {cableId, fiberIdx} for shift-range breaks
   showAddCable: false,
   showLinkClosure: false,
   closureMarkers: {},
@@ -3400,6 +3407,8 @@ async function openClosurePanel(closureId) {
   state.selectedClosure = closureId;
   state.spliceSel = { a: null, b: null };
   state.selectedSplice = null;
+  state.spliceDeleteMode = false;
+  state._delAnchor = null;
   state.showAddCable = false;
   state.showAddSplitter = false;
   splitterAssign = null;
@@ -3412,6 +3421,8 @@ function closePanel() {
   state.selectedClosure = null;
   state.spliceSel = { a: null, b: null };
   state.selectedSplice = null;
+  state.spliceDeleteMode = false;
+  state._delAnchor = null;
   splitterAssign = null;
 }
 
@@ -3501,6 +3512,11 @@ function renderPanel() {
       <button onclick="state.spliceSel={a:null,b:null};renderPanel();" title="Clear selection">×</button>
       <span style="flex-basis:100%;font-size:10px;opacity:.8;">${na || nb} per side will ${verb}-connect when counts match · Shift-click = range · Ctrl-click = toggle — ${hint}</span>
     </div>`;
+  } else if (state.spliceDeleteMode) {
+    html += `<div class="sel-bar" style="background:#ffebee;border-color:#ef9a9a;color:#c62828;flex-wrap:wrap;">
+      <span>✂ Delete mode — click a connected fiber (or its line) to break the splice · Shift-click = range</span>
+      <button onclick="toggleSpliceDeleteMode()" title="Exit delete mode" style="color:#c62828;">×</button>
+    </div>`;
   }
 
   // Auto-expand cables/tubes containing any selected fiber so their ports render
@@ -3536,6 +3552,7 @@ function renderPanel() {
     <button class="sd-typebtn ${state.fiberFilter === 'all' ? 'active' : ''}" onclick="setFiberFilter('all')">All fibers</button>
     <button class="sd-typebtn ${state.fiberFilter === 'connected' ? 'active' : ''}" onclick="setFiberFilter('connected')">Connected</button>
     <button class="sd-typebtn ${state.fiberFilter === 'splitter' ? 'active' : ''}" onclick="setFiberFilter('splitter')">Splitters only</button>
+    <button class="sd-typebtn sd-delbtn ${state.spliceDeleteMode ? 'active' : ''}" style="margin-left:auto;" onclick="toggleSpliceDeleteMode()" title="Click fibers to break their splices">✂ Delete</button>
   </div>`;
   html += renderSpliceDiagram(c, sel, connSet, connectedSet, splitterFiberSet);
 
@@ -3663,6 +3680,13 @@ function toggleCableSide(cableId) {
 
 function setNewSpliceType(t) { state.spliceType = t; renderPanel(); }
 function setFiberFilter(m) { state.fiberFilter = m; renderPanel(); }
+function toggleSpliceDeleteMode() {
+  state.spliceDeleteMode = !state.spliceDeleteMode;
+  state._delAnchor = null;
+  state.spliceSel = { a: null, b: null };   // leave connect-selection
+  splitterAssign = null;
+  renderPanel();
+}
 
 function splitterSide(sp) {
   const ls = localStorage.getItem('ofm-splitter-side-' + sp.id);
@@ -3747,7 +3771,7 @@ function renderSpliceDiagram(c, sel, connSet, connectedSet, splitterFiberSet) {
     return inner || `<div class="sd-col-empty">Nothing on this side.<br>Use ◀ / ▶ to move a cable or splitter here.</div>`;
   };
   return `<div class="section-title">Splice tray</div>
-    <div class="sd-diagram" id="sd-diagram">
+    <div class="sd-diagram${state.spliceDeleteMode ? ' del-mode' : ''}" id="sd-diagram">
       <div class="sd-col left">${col(left, splL, 'L')}</div>
       <div class="sd-col right">${col(right, splR, 'R')}</div>
       <svg class="sd-svg" id="sd-svg"></svg>
@@ -3846,6 +3870,7 @@ function drawSpliceLines() {
       });
       path.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (state.spliceDeleteMode) { breakSpliceById(s.id); return; }
         state.selectedSplice = (state.selectedSplice === s.id) ? null : s.id;
         renderPanel();
       });
@@ -4045,6 +4070,7 @@ function sideForCable(cableId) {
 }
 
 function selectFiber(cableId, fiberIdx, event) {
+  if (state.spliceDeleteMode) { return breakSpliceClick(cableId, fiberIdx, event); }
   if (splitterAssign) { return assignSplitterFiber(cableId, fiberIdx); }
   const sel = state.spliceSel;
   const shift = event && event.shiftKey;
@@ -4118,6 +4144,40 @@ function flashHint(msg) {
   el.style.color = document.body.classList.contains('dark-mode') ? '#fbbf24' : '#e65100';
   el.textContent = msg;
   setTimeout(() => { el.style.color = ''; el.textContent = prev; }, 3000);
+}
+
+// Delete-mode: break the splice(s) on a clicked fiber (Shift-click = range).
+async function breakSpliceClick(cableId, fiberIdx, event) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c) return;
+  let fibers = [fiberIdx];
+  if (event && event.shiftKey && state._delAnchor && state._delAnchor.cableId === cableId) {
+    const lo = Math.min(state._delAnchor.fiberIdx, fiberIdx);
+    const hi = Math.max(state._delAnchor.fiberIdx, fiberIdx);
+    fibers = [];
+    for (let i = lo; i <= hi; i++) fibers.push(i);
+  }
+  state._delAnchor = { cableId, fiberIdx };
+  const ids = (c.splices || []).filter(s => fibers.some(fi =>
+    (s.from_cable_id === cableId && s.from_fiber === fi) ||
+    (s.to_cable_id === cableId && s.to_fiber === fi)
+  )).map(s => s.id);
+  if (!ids.length) { renderPanel(); return; }
+  await Promise.all(ids.map(id => api('DELETE', '/splices/' + id).catch(() => {})));
+  c.splices = c.splices.filter(s => !ids.includes(s.id));
+  if (ids.includes(state.selectedSplice)) state.selectedSplice = null;
+  renderPanel();
+  flashHint(`Broke ${ids.length} splice${ids.length !== 1 ? 's' : ''}.`);
+}
+
+// Delete-mode: break one splice by id (used when clicking a connector line).
+async function breakSpliceById(id) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  try { await api('DELETE', '/splices/' + id); } catch (_) {}
+  if (c) c.splices = c.splices.filter(s => s.id !== id);
+  if (state.selectedSplice === id) state.selectedSplice = null;
+  renderPanel();
+  flashHint('Splice broken.');
 }
 
 async function deleteSplice(spliceId) {
