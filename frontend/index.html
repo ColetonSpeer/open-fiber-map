@@ -3504,7 +3504,7 @@ function renderPanel() {
     const na = sel.a ? sel.a.fibers.length : 0;
     const nb = sel.b ? sel.b.fibers.length : 0;
     let hint;
-    if (!sel.b) hint = 'select fibers on another cable';
+    if (!sel.b) hint = singleSelectedFiber() ? 'click another fiber to splice, or a splitter IN/leg to bind it' : 'select fibers on another cable';
     else if (na === nb) hint = 'connecting…';
     else hint = na > nb ? `select ${na - nb} more on ${h(c.cables.find(x => x.id === sel.b.cableId)?.name || 'side B')}`
                         : `${nb - na} extra on side B — deselect or add to side A`;
@@ -4030,28 +4030,44 @@ function beginSplitterAssign(splitterId, target) {
   if (state.spliceDeleteMode) {
     return unbindSplitterLink(splitterId, target === 'input' ? 'in' : 'leg-' + target);
   }
+  // Fiber-first: if exactly one fiber is selected, bind it to this port now.
+  const single = singleSelectedFiber();
+  if (single) {
+    return bindSplitterFiber(splitterId, target, single.cableId, single.fiberIdx);
+  }
   splitterAssign = { splitterId, target };
   state.spliceSel = { a: null, b: null };
   renderPanel();
 }
 
+// Port-first: a splitter target is armed (splitterAssign), user clicked a fiber.
 async function assignSplitterFiber(cableId, fiberIdx) {
+  return bindSplitterFiber(splitterAssign.splitterId, splitterAssign.target, cableId, fiberIdx);
+}
+
+// Bind a fiber to a splitter target ('input' or a leg_index). Used by both
+// port-first (assign then fiber) and fiber-first (select fiber then port) flows.
+async function bindSplitterFiber(splitterId, target, cableId, fiberIdx) {
   const c = state.closures.find(x => x.id === state.selectedClosure);
-  const sp = c.splitters.find(s => s.id === splitterAssign.splitterId);
+  const sp = c && (c.splitters || []).find(s => s.id === splitterId);
   if (!sp) { splitterAssign = null; return renderPanel(); }
-  const payload = { outputs: [] };
-  if (splitterAssign.target === 'input') {
-    payload.input_cable_id = cableId;
-    payload.input_fiber = fiberIdx;
-  } else {
-    payload.outputs = [{ leg_index: splitterAssign.target, output_cable_id: cableId, output_fiber: fiberIdx }];
-  }
+  const payload = (target === 'input')
+    ? { input_cable_id: cableId, input_fiber: fiberIdx }
+    : { outputs: [{ leg_index: target, output_cable_id: cableId, output_fiber: fiberIdx }] };
   try {
-    const updated = await api('PUT', '/splitters/' + sp.id, payload);
-    Object.assign(sp, updated);
-    splitterAssign = null;
-    renderPanel();
+    Object.assign(sp, await api('PUT', '/splitters/' + sp.id, payload));
   } catch (err) { alert('Failed: ' + err.message); }
+  splitterAssign = null;
+  state.spliceSel = { a: null, b: null };
+  renderPanel();
+}
+
+// The single selected fiber across both selection sides, or null if 0 or >1.
+function singleSelectedFiber() {
+  const sel = state.spliceSel;
+  const all = [];
+  [sel.a, sel.b].forEach(s => { if (s) s.fibers.forEach(fi => all.push({ cableId: s.cableId, fiberIdx: fi })); });
+  return all.length === 1 ? all[0] : null;
 }
 
 async function deleteSplitter(id) {
