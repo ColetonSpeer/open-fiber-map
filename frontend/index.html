@@ -3954,6 +3954,7 @@ function drawSpliceLines() {
         if (state.spliceDeleteMode) { breakSpliceById(s.id); return; }
         state.selectedSplice = (state.selectedSplice === s.id) ? null : s.id;
         state.selectedSplitterLink = null;
+        revealHighlightedConnection();
         renderPanel();
       };
       // Two halves, each in its own fiber's colour, meeting at the splice triangle.
@@ -3992,6 +3993,7 @@ function drawSpliceLines() {
         const cur = state.selectedSplitterLink;
         state.selectedSplitterLink = (cur && cur.splitterId === sp.id && cur.key === spKey) ? null : { splitterId: sp.id, key: spKey };
         state.selectedSplice = null;
+        revealHighlightedConnection();
         renderPanel();
       });
       // Fusion-splice joint (diamond) at the midpoint — the fiber is fusion-spliced to the splitter pigtail.
@@ -4202,6 +4204,31 @@ function sideForCable(cableId) {
   return null; // both sides taken by other cables
 }
 
+// Expand the cable + buffer tube (and un-collapse the splitter) holding each
+// endpoint of the currently highlighted connection, so the other end is visible.
+function revealHighlightedConnection() {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c) return;
+  const openFiber = (cableId, fi) => {
+    if (cableId == null || fi == null) return;
+    panelState.expandedCables.add(cableId);
+    panelState.expandedTubes.add(`${cableId}-${Math.floor(fi / 12)}`);
+  };
+  if (state.selectedSplice != null) {
+    const s = c.splices.find(x => x.id === state.selectedSplice);
+    if (s) { openFiber(s.from_cable_id, s.from_fiber); openFiber(s.to_cable_id, s.to_fiber); }
+  }
+  if (state.selectedSplitterLink) {
+    const { splitterId, key } = state.selectedSplitterLink;
+    panelState.collapsedSplitters.delete(splitterId);
+    const sp = (c.splitters || []).find(x => x.id === splitterId);
+    if (sp) {
+      if (key === 'in') openFiber(sp.input_cable_id, sp.input_fiber);
+      else { const li = parseInt(key.slice(4), 10); const o = (sp.outputs || []).find(x => x.leg_index === li); if (o) openFiber(o.output_cable_id, o.output_fiber); }
+    }
+  }
+}
+
 // The connection a fiber participates in, or null.
 function findFiberConnection(cableId, fiberIdx) {
   const c = state.closures.find(x => x.id === state.selectedClosure);
@@ -4239,6 +4266,7 @@ function selectFiber(cableId, fiberIdx, event) {
         state.selectedSplitterLink = same ? null : { splitterId: conn.splitterId, key: conn.key };
         state.selectedSplice = null;
       }
+      revealHighlightedConnection();
       renderPanel();
       return;
     }
