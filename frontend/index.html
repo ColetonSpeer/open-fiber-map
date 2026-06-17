@@ -112,6 +112,14 @@ body.dark-mode .fiber-row.selected-b { background: #163a26; }
 .sd-diagram .cable-hdr, .sd-diagram .tube-label { position: relative; }
 .sd-col.right .fiber-row { flex-direction: row-reverse; text-align: right; }
 .sd-col.right .fiber-row .conn-info { margin-left: 0; margin-right: auto; }
+.sd-splrow { position: relative; display: flex; gap: 6px; align-items: center; padding: 4px 10px; font-size: 11px; cursor: pointer; border-top: 1px solid #f0f0f0; }
+.sd-splrow:hover { background: #fff8ef; }
+.sd-splrow.assigning { background: #fff3e0; outline: 1.5px solid #ffb74d; }
+.splrow-label { color: #888; min-width: 40px; }
+.sd-col.right .sd-splrow { flex-direction: row-reverse; text-align: right; }
+body.dark-mode .sd-splrow { border-top-color: #374151; }
+body.dark-mode .sd-splrow:hover { background: #3a2c17; }
+body.dark-mode .sd-splrow.assigning { background: #3a2c17; }
 .sd-port { position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%; background: #b0bec5; transform: translateY(-50%); pointer-events: none; }
 .sd-col.left .sd-port  { right: -5px; }
 .sd-col.right .sd-port { left: -5px; }
@@ -465,6 +473,7 @@ let state = {
   spliceSel: { a: null, b: null },   // mass-connect: each side = {cableId, fibers:[], anchor}
   selectedSplice: null,
   spliceType: 'fusion',
+  fiberFilter: 'all',                // 'all' | 'connected' | 'splitter'
   showAddCable: false,
   showLinkClosure: false,
   closureMarkers: {},
@@ -3415,6 +3424,15 @@ function renderPanel() {
     connSet.add(`${s.from_cable_id}-${s.from_fiber}`);
     connSet.add(`${s.to_cable_id}-${s.to_fiber}`);
   });
+  // Fibers bound to a splitter (input or any leg)
+  const splitterFiberSet = new Set();
+  (c.splitters || []).forEach(sp => {
+    if (sp.input_cable_id != null && sp.input_fiber != null) splitterFiberSet.add(`${sp.input_cable_id}-${sp.input_fiber}`);
+    (sp.outputs || []).forEach(o => {
+      if (o.output_cable_id != null && o.output_fiber != null) splitterFiberSet.add(`${o.output_cable_id}-${o.output_fiber}`);
+    });
+  });
+  const connectedSet = new Set([...connSet, ...splitterFiberSet]);
 
   const sel = state.spliceSel;
   let html = `
@@ -3495,11 +3513,31 @@ function renderPanel() {
     }
   });
 
+  // In a filtered view, expand cables/tubes that have visible fibers so the
+  // connector lines anchor to the actual fibers (not a collapsed header).
+  if (state.fiberFilter !== 'all') {
+    c.cables.forEach(cab => {
+      let any = false;
+      for (let fi = 0; fi < cab.fiber_count; fi++) {
+        if (fiberVisible(cab.id, fi, connectedSet, splitterFiberSet)) {
+          any = true;
+          panelState.expandedTubes.add(`${cab.id}-${Math.floor(fi / 12)}`);
+        }
+      }
+      if (any) panelState.expandedCables.add(cab.id);
+    });
+  }
+
   html += `<div class="sd-typebar">Splice type:
     <button class="sd-typebtn ${state.spliceType === 'fusion' ? 'active' : ''}" onclick="setNewSpliceType('fusion')">◆ Fusion</button>
     <button class="sd-typebtn ${state.spliceType === 'pass-through' ? 'active' : ''}" onclick="setNewSpliceType('pass-through')">┄ Glass-through</button>
   </div>`;
-  html += renderSpliceDiagram(c, sel, connSet);
+  html += `<div class="sd-typebar">Show:
+    <button class="sd-typebtn ${state.fiberFilter === 'all' ? 'active' : ''}" onclick="setFiberFilter('all')">All fibers</button>
+    <button class="sd-typebtn ${state.fiberFilter === 'connected' ? 'active' : ''}" onclick="setFiberFilter('connected')">Connected</button>
+    <button class="sd-typebtn ${state.fiberFilter === 'splitter' ? 'active' : ''}" onclick="setFiberFilter('splitter')">Splitters only</button>
+  </div>`;
+  html += renderSpliceDiagram(c, sel, connSet, connectedSet, splitterFiberSet);
 
   if (state.showAddCable) {
     if (c.pole_id) {
@@ -3624,8 +3662,29 @@ function toggleCableSide(cableId) {
 }
 
 function setNewSpliceType(t) { state.spliceType = t; renderPanel(); }
+function setFiberFilter(m) { state.fiberFilter = m; renderPanel(); }
 
-function renderCableBox(cable, side, c, sel, connSet) {
+function splitterSide(sp) {
+  const ls = localStorage.getItem('ofm-splitter-side-' + sp.id);
+  if (ls === 'L' || ls === 'R') return ls;
+  return 'R';   // splitters default to the right column
+}
+
+function toggleSplitterSide(spId) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const sp = c && (c.splitters || []).find(x => x.id === spId);
+  if (!sp) return;
+  localStorage.setItem('ofm-splitter-side-' + spId, splitterSide(sp) === 'L' ? 'R' : 'L');
+  renderPanel();
+}
+
+function fiberVisible(cableId, fi, connectedSet, splitterFiberSet) {
+  if (state.fiberFilter === 'connected') return connectedSet.has(`${cableId}-${fi}`);
+  if (state.fiberFilter === 'splitter') return splitterFiberSet.has(`${cableId}-${fi}`);
+  return true;
+}
+
+function renderCableBox(cable, side, c, sel, connSet, connectedSet, splitterFiberSet) {
   const tubes = Math.ceil(cable.fiber_count / 12);
   const isExpanded = panelState.expandedCables.has(cable.id);
   const chevron = isExpanded ? '▼' : '▶';
@@ -3654,8 +3713,9 @@ function renderCableBox(cable, side, c, sel, connSet) {
       if (tubes === 1 || isTubeExpanded) {
         for (let f = 0; f < inTube; f++) {
           const fi = t * 12 + f;
+          if (!fiberVisible(cable.id, fi, connectedSet, splitterFiberSet)) continue;
           const fc = FIBER_COLORS[f % 12];
-          const isConn = connSet.has(`${cable.id}-${fi}`);
+          const isConn = connectedSet.has(`${cable.id}-${fi}`);
           const inA = sel.a && sel.a.cableId === cable.id && sel.a.fibers.includes(fi);
           const inB = sel.b && sel.b.cableId === cable.id && sel.b.fibers.includes(fi);
           const selCls = inA ? 'selected' : (inB ? 'selected-b' : '');
@@ -3672,18 +3732,60 @@ function renderCableBox(cable, side, c, sel, connSet) {
   return html;
 }
 
-function renderSpliceDiagram(c, sel, connSet) {
+function renderSpliceDiagram(c, sel, connSet, connectedSet, splitterFiberSet) {
   const left = [], right = [];
-  c.cables.forEach(cab => (cableSide(cab) === 'R' ? right : left).push(cab));
-  const col = (cables, side) => cables.length
-    ? cables.map(cab => renderCableBox(cab, side, c, sel, connSet)).join('')
-    : `<div class="sd-col-empty">No cables on this side.<br>Use ◀ / ▶ on a cable to move it here.</div>`;
+  const splL = [], splR = [];
+  // In "Splitters only", keep only cables that actually feed a splitter (so their
+  // bound-fiber ports still render for the connector lines); other cables are hidden.
+  const cableHasBound = (cab) => [...splitterFiberSet].some(k => k.startsWith(cab.id + '-'));
+  const cables = state.fiberFilter === 'splitter' ? c.cables.filter(cableHasBound) : c.cables;
+  cables.forEach(cab => (cableSide(cab) === 'R' ? right : left).push(cab));
+  (c.splitters || []).forEach(sp => (splitterSide(sp) === 'R' ? splR : splL).push(sp));
+  const col = (cables, splitters, side) => {
+    let inner = cables.map(cab => renderCableBox(cab, side, c, sel, connSet, connectedSet, splitterFiberSet)).join('');
+    inner += splitters.map(sp => renderSplitterBox(sp, side, c)).join('');
+    return inner || `<div class="sd-col-empty">Nothing on this side.<br>Use ◀ / ▶ to move a cable or splitter here.</div>`;
+  };
   return `<div class="section-title">Splice tray</div>
     <div class="sd-diagram" id="sd-diagram">
-      <div class="sd-col left">${col(left, 'L')}</div>
-      <div class="sd-col right">${col(right, 'R')}</div>
+      <div class="sd-col left">${col(left, splL, 'L')}</div>
+      <div class="sd-col right">${col(right, splR, 'R')}</div>
       <svg class="sd-svg" id="sd-svg"></svg>
     </div>`;
+}
+
+function renderSplitterBox(sp, side, c) {
+  const isTap = sp.splitter_type === 'tap';
+  const badge = isTap ? 'TAP' : (sp.ratio || '1:N');
+  const sideBtn = `<button class="sd-side-btn" title="Move to other side" onclick="event.stopPropagation();toggleSplitterSide(${sp.id})">${side === 'L' ? '▶' : '◀'}</button>`;
+  const boundLabel = (cableId, fiber0) => {
+    if (cableId == null || fiber0 == null) return '<span style="color:#888;">— click, then a fiber</span>';
+    const cable = c.cables.find(x => x.id === cableId);
+    const fc = FIBER_COLORS[fiber0 % 12];
+    return `<span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};width:9px;height:9px;"></span> ${h(cable?.name || '?')} F${fiber0 + 1}`;
+  };
+  const assigning = (target) => splitterAssign && splitterAssign.splitterId === sp.id && splitterAssign.target === target;
+  let html = `<div class="cable" style="border-left:3px solid #ff9800;">
+    <div class="cable-hdr" style="cursor:default;">
+      <span>🌳 ${h(sp.name)} · <span class="dir-badge" style="background:#fff3e0;color:#e65100;">${h(badge)}</span></span>
+      <span style="display:flex;gap:4px;align-items:center;">${sideBtn}<button class="icon-btn" onclick="deleteSplitter(${sp.id})" title="Delete">🗑</button></span>
+    </div>
+    <div class="sd-splrow ${assigning('input') ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},'input')" title="Click, then a fiber, to bind the input">
+      <span class="splrow-label">IN</span>
+      <span class="splrow-val">${boundLabel(sp.input_cable_id, sp.input_fiber)}</span>
+      <span class="sd-port" id="splport-${sp.id}-in" data-side="${side}"></span>
+    </div>`;
+  (sp.outputs || []).forEach(o => {
+    const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
+    const loss = o.loss_db != null ? ` <span style="color:#1565c0;">−${(+o.loss_db).toFixed(1)}dB</span>` : '';
+    html += `<div class="sd-splrow ${assigning(o.leg_index) ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},${o.leg_index})" title="Click, then a fiber, to bind this leg">
+      <span class="splrow-label">Leg ${h(o.label || o.leg_index)}${pct}${loss}</span>
+      <span class="splrow-val">${boundLabel(o.output_cable_id, o.output_fiber)}</span>
+      <span class="sd-port" id="splport-${sp.id}-leg-${o.leg_index}" data-side="${side}"></span>
+    </div>`;
+  });
+  html += '</div>';
+  return html;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -3702,59 +3804,85 @@ function drawSpliceLines() {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-  const anchor = (cableId, fiberIdx) => {
-    let el = document.getElementById(`port-${cableId}-${fiberIdx}`);
-    if (!el) el = document.getElementById(`tubehdrport-${cableId}-${Math.floor(fiberIdx / 12)}`);
-    if (!el) el = document.getElementById(`cablehdrport-${cableId}`);
+  const anchorEl = (el) => {
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2 - dRect.left, y: r.top + r.height / 2 - dRect.top, side: el.dataset.side };
   };
-
-  (c.splices || []).forEach(s => {
-    const a = anchor(s.from_cable_id, s.from_fiber);
-    const b = anchor(s.to_cable_id, s.to_fiber);
-    if (!a || !b) return;
-    const fc = FIBER_COLORS[s.from_fiber % 12];
-    const isPass = s.splice_type === 'pass-through';
-    const isSel = s.id === state.selectedSplice;
+  const anchor = (cableId, fiberIdx) => anchorEl(
+    document.getElementById(`port-${cableId}-${fiberIdx}`)
+    || document.getElementById(`tubehdrport-${cableId}-${Math.floor(fiberIdx / 12)}`)
+    || document.getElementById(`cablehdrport-${cableId}`)
+  );
+  const splitterAnchor = (spId, key) => anchorEl(document.getElementById(`splport-${spId}-${key}`));
+  const curveD = (a, b) => {
     const off = a.side === b.side ? 60 : Math.max(40, Math.abs(b.x - a.x) * 0.4);
     const c1x = a.x + (a.side === 'L' ? off : -off);
     const c2x = b.x + (b.side === 'L' ? off : -off);
-
+    return { d: `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`, c1x, c2x };
+  };
+  const addPath = (d, attrs) => {
     const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d', `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`);
+    path.setAttribute('d', d);
     path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', fc.bg);
-    path.setAttribute('stroke-width', isSel ? 4 : 2.25);
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('opacity', isSel ? 1 : 0.9);
-    if (isPass) path.setAttribute('stroke-dasharray', '5 4');
-    path.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.selectedSplice = (state.selectedSplice === s.id) ? null : s.id;
-      renderPanel();
-    });
+    Object.entries(attrs).forEach(([k, v]) => path.setAttribute(k, v));
     svg.appendChild(path);
+    return path;
+  };
 
-    if (!isPass) {
-      // Fusion joint node at the bezier midpoint (t = 0.5)
-      const mx = 0.125 * a.x + 0.375 * c1x + 0.375 * c2x + 0.125 * b.x;
-      const my = 0.5 * (a.y + b.y);
-      const node = document.createElementNS(SVG_NS, 'rect');
-      node.setAttribute('x', mx - 4); node.setAttribute('y', my - 4);
-      node.setAttribute('width', 8); node.setAttribute('height', 8);
-      node.setAttribute('transform', `rotate(45 ${mx} ${my})`);
-      node.setAttribute('fill', fc.bg);
-      node.setAttribute('stroke', fc.border);
-      node.setAttribute('stroke-width', 1.5);
-      svg.appendChild(node);
-    }
+  // Fiber↔fiber splices (hidden in Splitters-only view)
+  if (state.fiberFilter !== 'splitter') {
+    (c.splices || []).forEach(s => {
+      const a = anchor(s.from_cable_id, s.from_fiber);
+      const b = anchor(s.to_cable_id, s.to_fiber);
+      if (!a || !b) return;
+      const fc = FIBER_COLORS[s.from_fiber % 12];
+      const isPass = s.splice_type === 'pass-through';
+      const isSel = s.id === state.selectedSplice;
+      const { d, c1x, c2x } = curveD(a, b);
+      const path = addPath(d, {
+        stroke: fc.bg, 'stroke-width': isSel ? 4 : 2.25, 'stroke-linecap': 'round',
+        opacity: isSel ? 1 : 0.9, ...(isPass ? { 'stroke-dasharray': '5 4' } : {}),
+      });
+      path.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.selectedSplice = (state.selectedSplice === s.id) ? null : s.id;
+        renderPanel();
+      });
+      if (!isPass) {
+        const mx = 0.125 * a.x + 0.375 * c1x + 0.375 * c2x + 0.125 * b.x;
+        const my = 0.5 * (a.y + b.y);
+        const node = document.createElementNS(SVG_NS, 'rect');
+        node.setAttribute('x', mx - 4); node.setAttribute('y', my - 4);
+        node.setAttribute('width', 8); node.setAttribute('height', 8);
+        node.setAttribute('transform', `rotate(45 ${mx} ${my})`);
+        node.setAttribute('fill', fc.bg); node.setAttribute('stroke', fc.border); node.setAttribute('stroke-width', 1.5);
+        svg.appendChild(node);
+      }
+    });
+  }
+
+  // Splitter wiring: fiber → IN port, leg port → fiber. A dot marks the splitter end.
+  (c.splitters || []).forEach(sp => {
+    const drawBind = (cableId, fiberIdx, spKey) => {
+      if (cableId == null || fiberIdx == null) return;
+      const f = anchor(cableId, fiberIdx);
+      const p = splitterAnchor(sp.id, spKey);
+      if (!f || !p) return;
+      const fc = FIBER_COLORS[fiberIdx % 12];
+      addPath(curveD(f, p).d, { stroke: fc.bg, 'stroke-width': 2.25, 'stroke-linecap': 'round', opacity: 0.95 });
+      const dot = document.createElementNS(SVG_NS, 'circle');
+      dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y); dot.setAttribute('r', 3.8);
+      dot.setAttribute('fill', fc.bg); dot.setAttribute('stroke', '#ff9800'); dot.setAttribute('stroke-width', 1.5);
+      svg.appendChild(dot);
+    };
+    drawBind(sp.input_cable_id, sp.input_fiber, 'in');
+    (sp.outputs || []).forEach(o => drawBind(o.output_cable_id, o.output_fiber, 'leg-' + o.leg_index));
   });
 
   // Pending-pair preview: faint dashed lines for the in-order pairs being built.
   const sel = state.spliceSel;
-  if (sel.a && sel.b && sel.a.fibers.length && sel.b.fibers.length) {
+  if (state.fiberFilter !== 'splitter' && sel.a && sel.b && sel.a.fibers.length && sel.b.fibers.length) {
     const aF = [...sel.a.fibers].sort((x, y) => x - y);
     const bF = [...sel.b.fibers].sort((x, y) => x - y);
     const pairs = Math.min(aF.length, bF.length);
@@ -3762,17 +3890,7 @@ function drawSpliceLines() {
       const a = anchor(sel.a.cableId, aF[i]);
       const b = anchor(sel.b.cableId, bF[i]);
       if (!a || !b) continue;
-      const off = a.side === b.side ? 60 : Math.max(40, Math.abs(b.x - a.x) * 0.4);
-      const c1x = a.x + (a.side === 'L' ? off : -off);
-      const c2x = b.x + (b.side === 'L' ? off : -off);
-      const path = document.createElementNS(SVG_NS, 'path');
-      path.setAttribute('d', `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`);
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', '#9ca3af');
-      path.setAttribute('stroke-width', 1.5);
-      path.setAttribute('stroke-dasharray', '3 4');
-      path.setAttribute('opacity', '0.7');
-      svg.appendChild(path);
+      addPath(curveD(a, b).d, { stroke: '#9ca3af', 'stroke-width': 1.5, 'stroke-dasharray': '3 4', opacity: 0.7 });
     }
   }
 }
@@ -3800,26 +3918,9 @@ function fiberRefLabel(c, cableId, fiber0, onAssign) {
 }
 
 function renderSplitterSection(c) {
+  // Splitters are now rendered as boxes inside the splice tray (renderSplitterBox);
+  // this section only holds the add control + form.
   let html = '<div class="section-title">Splitters &amp; Taps</div>';
-  (c.splitters || []).forEach(sp => {
-    const isTap = sp.splitter_type === 'tap';
-    const badge = isTap ? 'TAP' : (sp.ratio || '1:N');
-    html += `<div class="cable" style="border-left:3px solid #ff9800;">
-      <div class="cable-hdr" style="cursor:default;">
-        <span>🌳 ${h(sp.name)} · <span class="dir-badge" style="background:#fff3e0;color:#e65100;">${h(badge)}</span></span>
-        <button class="icon-btn" onclick="deleteSplitter(${sp.id})" title="Delete">🗑</button>
-      </div>
-      <div style="padding:4px 10px;font-size:0.85em;">
-        <div style="margin:3px 0;"><span style="color:#888;">Input:</span>
-          ${fiberRefLabel(c, sp.input_cable_id, sp.input_fiber, `beginSplitterAssign(${sp.id},'input')`)}</div>`;
-    (sp.outputs || []).forEach(o => {
-      const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
-      const loss = o.loss_db != null ? ` <span style="color:#1565c0;">−${(+o.loss_db).toFixed(1)}dB</span>` : '';
-      html += `<div style="margin:3px 0;"><span style="color:#888;">Leg ${h(o.label || o.leg_index)}${pct}${loss}:</span>
-        ${fiberRefLabel(c, o.output_cable_id, o.output_fiber, `beginSplitterAssign(${sp.id},${o.leg_index})`)}</div>`;
-    });
-    html += `</div></div>`;
-  });
 
   if (state.showAddSplitter) {
     html += `<div class="form-card">
