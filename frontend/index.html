@@ -515,7 +515,7 @@ let state = {
 
 let map;
 let _mapLayersPanelOpen = false;
-const panelState = { expandedCables: new Set(), expandedTubes: new Set() };
+const panelState = { expandedCables: new Set(), expandedTubes: new Set(), collapsedSplitters: new Set() };
 // When set, the next fiber clicked is assigned to this splitter leg/input
 // instead of starting a splice. { splitterId, target: 'input' | <legIndex> }
 let splitterAssign = null;
@@ -3794,31 +3794,37 @@ function renderSplitterBox(sp, side, c) {
   // In "Connected" view, show only the ports that are actually bound (like cables show only connected fibers).
   const connectedOnly = state.fiberFilter === 'connected';
   const inputBound = sp.input_cable_id != null && sp.input_fiber != null;
+  const boundLegs = (sp.outputs || []).filter(o => o.output_cable_id != null && o.output_fiber != null).length;
+  const collapsed = panelState.collapsedSplitters.has(sp.id);
+  const chevron = collapsed ? '▶' : '▼';
   let html = `<div class="cable" style="border-left:3px solid #ff9800;">
-    <div class="cable-hdr" style="cursor:default;">
-      <span>🌳 ${h(sp.name)} · <span class="dir-badge" style="background:#fff3e0;color:#e65100;">${h(badge)}</span></span>
-      <span style="display:flex;gap:4px;align-items:center;">${sideBtn}<button class="icon-btn" onclick="deleteSplitter(${sp.id})" title="Delete">🗑</button></span>
+    <div class="cable-hdr" onclick="toggleSplitter(${sp.id})" style="user-select:none;">
+      <span>${chevron} 🌳 ${h(sp.name)} · <span class="dir-badge" style="background:#fff3e0;color:#e65100;">${h(badge)}</span>${collapsed ? ` <span style="color:#888;font-weight:400;">${(inputBound ? 1 : 0) + boundLegs} connected</span>` : ''}</span>
+      <span style="display:flex;gap:4px;align-items:center;">${sideBtn}<button class="icon-btn" onclick="event.stopPropagation();deleteSplitter(${sp.id})" title="Delete">🗑</button></span>
+      <span class="sd-port" id="splhdrport-${sp.id}" data-side="${side}"></span>
     </div>`;
-  if (!connectedOnly || inputBound) {
-    html += `<div class="sd-splrow ${assigning('input') ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},'input')" title="Click, then a fiber, to bind the input">
-      <span class="splrow-label">IN</span>
-      <span class="splrow-val">${boundLabel(sp.input_cable_id, sp.input_fiber)}</span>
-      <span class="sd-port" id="splport-${sp.id}-in" data-side="${side}"></span>
-    </div>`;
-  }
-  (sp.outputs || []).forEach(o => {
-    const legBound = o.output_cable_id != null && o.output_fiber != null;
-    if (connectedOnly && !legBound) return;
-    const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
-    const loss = o.loss_db != null ? ` <span style="color:#1565c0;">−${(+o.loss_db).toFixed(1)}dB</span>` : '';
-    html += `<div class="sd-splrow ${assigning(o.leg_index) ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},${o.leg_index})" title="Click, then a fiber, to bind this leg">
-      <span class="splrow-label">Leg ${h(o.label || o.leg_index)}${pct}${loss}</span>
-      <span class="splrow-val">${boundLabel(o.output_cable_id, o.output_fiber)}</span>
-      <span class="sd-port" id="splport-${sp.id}-leg-${o.leg_index}" data-side="${side}"></span>
-    </div>`;
-  });
-  if (connectedOnly && !inputBound && !(sp.outputs || []).some(o => o.output_cable_id != null && o.output_fiber != null)) {
-    html += `<div class="sd-splrow" style="cursor:default;color:#aaa;">No connected ports</div>`;
+  if (!collapsed) {
+    if (!connectedOnly || inputBound) {
+      html += `<div class="sd-splrow ${assigning('input') ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},'input')" title="Click, then a fiber, to bind the input">
+        <span class="splrow-label">IN</span>
+        <span class="splrow-val">${boundLabel(sp.input_cable_id, sp.input_fiber)}</span>
+        <span class="sd-port" id="splport-${sp.id}-in" data-side="${side}"></span>
+      </div>`;
+    }
+    (sp.outputs || []).forEach(o => {
+      const legBound = o.output_cable_id != null && o.output_fiber != null;
+      if (connectedOnly && !legBound) return;
+      const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
+      const loss = o.loss_db != null ? ` <span style="color:#1565c0;">−${(+o.loss_db).toFixed(1)}dB</span>` : '';
+      html += `<div class="sd-splrow ${assigning(o.leg_index) ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},${o.leg_index})" title="Click, then a fiber, to bind this leg">
+        <span class="splrow-label">Leg ${h(o.label || o.leg_index)}${pct}${loss}</span>
+        <span class="splrow-val">${boundLabel(o.output_cable_id, o.output_fiber)}</span>
+        <span class="sd-port" id="splport-${sp.id}-leg-${o.leg_index}" data-side="${side}"></span>
+      </div>`;
+    });
+    if (connectedOnly && !inputBound && !boundLegs) {
+      html += `<div class="sd-splrow" style="cursor:default;color:#aaa;">No connected ports</div>`;
+    }
   }
   html += '</div>';
   return html;
@@ -3850,7 +3856,10 @@ function drawSpliceLines() {
     || document.getElementById(`tubehdrport-${cableId}-${Math.floor(fiberIdx / 12)}`)
     || document.getElementById(`cablehdrport-${cableId}`)
   );
-  const splitterAnchor = (spId, key) => anchorEl(document.getElementById(`splport-${spId}-${key}`));
+  const splitterAnchor = (spId, key) => anchorEl(
+    document.getElementById(`splport-${spId}-${key}`)
+    || document.getElementById(`splhdrport-${spId}`)   // collapsed → anchor to the splitter header
+  );
   const curveD = (a, b) => {
     const off = a.side === b.side ? 60 : Math.max(40, Math.abs(b.x - a.x) * 0.4);
     const c1x = a.x + (a.side === 'L' ? off : -off);
@@ -4041,6 +4050,12 @@ function toggleTube(cableId, tubeIdx) {
   } else {
     panelState.expandedTubes.add(key);
   }
+  renderPanel();
+}
+
+function toggleSplitter(spId) {
+  if (panelState.collapsedSplitters.has(spId)) panelState.collapsedSplitters.delete(spId);
+  else panelState.collapsedSplitters.add(spId);
   renderPanel();
 }
 
