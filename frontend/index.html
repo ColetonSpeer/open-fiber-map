@@ -3897,8 +3897,19 @@ function drawSpliceLines() {
       const p = splitterAnchor(sp.id, spKey);
       if (!f || !p) return;
       const fc = FIBER_COLORS[fiberIdx % 12];
-      const path = addPath(curveD(f, p).d, { stroke: fc.bg, 'stroke-width': 2.25, 'stroke-linecap': 'round', opacity: 0.95 });
+      const { d, c1x, c2x } = curveD(f, p);
+      const path = addPath(d, { stroke: fc.bg, 'stroke-width': 2.25, 'stroke-linecap': 'round', opacity: 0.95 });
       if (state.spliceDeleteMode) path.addEventListener('click', (e) => { e.stopPropagation(); unbindSplitterLink(sp.id, spKey); });
+      // Fusion-splice joint (diamond) at the midpoint — the fiber is fusion-spliced to the splitter pigtail.
+      const mx = 0.125 * f.x + 0.375 * c1x + 0.375 * c2x + 0.125 * p.x;
+      const my = 0.5 * (f.y + p.y);
+      const node = document.createElementNS(SVG_NS, 'rect');
+      node.setAttribute('x', mx - 4); node.setAttribute('y', my - 4);
+      node.setAttribute('width', 8); node.setAttribute('height', 8);
+      node.setAttribute('transform', `rotate(45 ${mx} ${my})`);
+      node.setAttribute('fill', fc.bg); node.setAttribute('stroke', fc.border); node.setAttribute('stroke-width', 1.5);
+      svg.appendChild(node);
+      // Small ring marks the splitter port end.
       const dot = document.createElementNS(SVG_NS, 'circle');
       dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y); dot.setAttribute('r', 3.8);
       dot.setAttribute('fill', fc.bg); dot.setAttribute('stroke', '#ff9800'); dot.setAttribute('stroke-width', 1.5);
