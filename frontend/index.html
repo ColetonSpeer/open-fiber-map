@@ -65,6 +65,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .fiber-row:hover { background: #f8f8fa; }
 .fiber-row.selected { background: #e3f2fd; outline: 1.5px solid #1565c0; }
 .fiber-row.selected-b { background: #e8f5e9; outline: 1.5px solid #2e7d32; }
+.fiber-row.hl, .sd-splrow.hl { background: #fff8e1; outline: 2px solid #f9a825; }
+body.dark-mode .fiber-row.hl, body.dark-mode .sd-splrow.hl { background: #3a3115; outline-color: #f9a825; }
 .fiber-row.connected .fiber-dot { opacity: 0.5; }
 body.dark-mode .fiber-row.selected { background: #1e3a5f; }
 body.dark-mode .fiber-row.selected-b { background: #163a26; }
@@ -479,6 +481,7 @@ let state = {
   selectedClosure: null,
   spliceSel: { a: null, b: null },   // mass-connect: each side = {cableId, fibers:[], anchor}
   selectedSplice: null,
+  selectedSplitterLink: null,        // {splitterId, key} highlighted splitter binding
   spliceType: 'fusion',
   fiberFilter: 'all',                // 'all' | 'connected' | 'splitter'
   spliceDeleteMode: false,           // when on, clicking a fiber breaks its splice
@@ -3409,6 +3412,7 @@ async function openClosurePanel(closureId) {
   state.selectedClosure = closureId;
   state.spliceSel = { a: null, b: null };
   state.selectedSplice = null;
+  state.selectedSplitterLink = null;
   state.spliceDeleteMode = false;
   state._delAnchor = null;
   state.showAddCable = false;
@@ -3423,6 +3427,7 @@ function closePanel() {
   state.selectedClosure = null;
   state.spliceSel = { a: null, b: null };
   state.selectedSplice = null;
+  state.selectedSplitterLink = null;
   state.spliceDeleteMode = false;
   state._delAnchor = null;
   splitterAssign = null;
@@ -3446,6 +3451,24 @@ function renderPanel() {
     });
   });
   const connectedSet = new Set([...connSet, ...splitterFiberSet]);
+
+  // Highlighted connection (from clicking a connected fiber or a line): the
+  // fiber endpoints to outline, and the splitter port row to outline.
+  state._hlFibers = new Set();
+  state._hlSplitter = null;
+  if (state.selectedSplice != null) {
+    const s = c.splices.find(x => x.id === state.selectedSplice);
+    if (s) { state._hlFibers.add(`${s.from_cable_id}-${s.from_fiber}`); state._hlFibers.add(`${s.to_cable_id}-${s.to_fiber}`); }
+  }
+  if (state.selectedSplitterLink) {
+    const { splitterId, key } = state.selectedSplitterLink;
+    const sp = (c.splitters || []).find(x => x.id === splitterId);
+    if (sp) {
+      if (key === 'in') { if (sp.input_cable_id != null) state._hlFibers.add(`${sp.input_cable_id}-${sp.input_fiber}`); }
+      else { const li = parseInt(key.slice(4), 10); const o = (sp.outputs || []).find(x => x.leg_index === li); if (o && o.output_cable_id != null) state._hlFibers.add(`${o.output_cable_id}-${o.output_fiber}`); }
+      state._hlSplitter = state.selectedSplitterLink;
+    }
+  }
 
   const sel = state.spliceSel;
   let html = `
@@ -3767,7 +3790,8 @@ function renderCableBox(cable, side, c, sel, connSet, connectedSet, splitterFibe
           const inA = sel.a && sel.a.cableId === cable.id && sel.a.fibers.includes(fi);
           const inB = sel.b && sel.b.cableId === cable.id && sel.b.fibers.includes(fi);
           const selCls = inA ? 'selected' : (inB ? 'selected-b' : '');
-          html += `<div class="fiber-row ${selCls} ${isConn && !selCls ? 'connected' : ''}" onclick="selectFiber(${cable.id}, ${fi}, event)">
+          const hlCls = (state._hlFibers && state._hlFibers.has(`${cable.id}-${fi}`)) ? 'hl' : '';
+          html += `<div class="fiber-row ${selCls} ${hlCls} ${isConn && !selCls ? 'connected' : ''}" onclick="selectFiber(${cable.id}, ${fi}, event)">
             <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};"></span>
             <span class="fiber-name">F${fi + 1} · ${fc.name}</span>
             <span class="sd-port" id="port-${cable.id}-${fi}" data-side="${side}"></span>
@@ -3813,6 +3837,7 @@ function renderSplitterBox(sp, side, c) {
     return `<span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};width:9px;height:9px;"></span> ${h(cable?.name || '?')} F${fiber0 + 1}`;
   };
   const assigning = (target) => splitterAssign && splitterAssign.splitterId === sp.id && splitterAssign.target === target;
+  const hl = (key) => (state._hlSplitter && state._hlSplitter.splitterId === sp.id && state._hlSplitter.key === key) ? 'hl' : '';
   // In "Connected" view, show only the ports that are actually bound (like cables show only connected fibers).
   const connectedOnly = state.fiberFilter === 'connected';
   const inputBound = sp.input_cable_id != null && sp.input_fiber != null;
@@ -3827,7 +3852,7 @@ function renderSplitterBox(sp, side, c) {
     </div>`;
   if (!collapsed) {
     if (!connectedOnly || inputBound) {
-      html += `<div class="sd-splrow ${assigning('input') ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},'input')" title="Click, then a fiber, to bind the input">
+      html += `<div class="sd-splrow ${assigning('input') ? 'assigning' : ''} ${hl('in')}" onclick="beginSplitterAssign(${sp.id},'input')" title="Click, then a fiber, to bind the input">
         <span class="splrow-label">IN</span>
         <span class="splrow-val">${boundLabel(sp.input_cable_id, sp.input_fiber)}</span>
         <span class="sd-port" id="splport-${sp.id}-in" data-side="${side}"></span>
@@ -3838,7 +3863,7 @@ function renderSplitterBox(sp, side, c) {
       if (connectedOnly && !legBound) return;
       const pct = o.tap_percent != null ? ` ${o.tap_percent}%` : '';
       const loss = o.loss_db != null ? ` <span style="color:#1565c0;">−${(+o.loss_db).toFixed(1)}dB</span>` : '';
-      html += `<div class="sd-splrow ${assigning(o.leg_index) ? 'assigning' : ''}" onclick="beginSplitterAssign(${sp.id},${o.leg_index})" title="Click, then a fiber, to bind this leg">
+      html += `<div class="sd-splrow ${assigning(o.leg_index) ? 'assigning' : ''} ${hl('leg-' + o.leg_index)}" onclick="beginSplitterAssign(${sp.id},${o.leg_index})" title="Click, then a fiber, to bind this leg">
         <span class="splrow-label">Leg ${h(o.label || o.leg_index)}${pct}${loss}</span>
         <span class="splrow-val">${boundLabel(o.output_cable_id, o.output_fiber)}</span>
         <span class="sd-port" id="splport-${sp.id}-leg-${o.leg_index}" data-side="${side}"></span>
@@ -3928,6 +3953,7 @@ function drawSpliceLines() {
         e.stopPropagation();
         if (state.spliceDeleteMode) { breakSpliceById(s.id); return; }
         state.selectedSplice = (state.selectedSplice === s.id) ? null : s.id;
+        state.selectedSplitterLink = null;
         renderPanel();
       };
       // Two halves, each in its own fiber's colour, meeting at the splice triangle.
@@ -3957,9 +3983,17 @@ function drawSpliceLines() {
       const p = splitterAnchor(sp.id, spKey);
       if (!f || !p) return;
       const fc = FIBER_COLORS[fiberIdx % 12];
+      const isSel = state.selectedSplitterLink && state.selectedSplitterLink.splitterId === sp.id && state.selectedSplitterLink.key === spKey;
       const { d, c1x, c2x } = curveD(f, p);
-      const path = addPath(d, { stroke: fc.bg, 'stroke-width': 2.25, 'stroke-linecap': 'round', opacity: 0.95 });
-      if (state.spliceDeleteMode) path.addEventListener('click', (e) => { e.stopPropagation(); unbindSplitterLink(sp.id, spKey); });
+      const path = addPath(d, { stroke: fc.bg, 'stroke-width': isSel ? 4 : 2.25, 'stroke-linecap': 'round', opacity: isSel ? 1 : 0.95 });
+      path.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.spliceDeleteMode) { unbindSplitterLink(sp.id, spKey); return; }
+        const cur = state.selectedSplitterLink;
+        state.selectedSplitterLink = (cur && cur.splitterId === sp.id && cur.key === spKey) ? null : { splitterId: sp.id, key: spKey };
+        state.selectedSplice = null;
+        renderPanel();
+      });
       // Fusion-splice joint (diamond) at the midpoint — the fiber is fusion-spliced to the splitter pigtail.
       const mx = 0.125 * f.x + 0.375 * c1x + 0.375 * c2x + 0.125 * p.x;
       const my = 0.5 * (f.y + p.y);
@@ -4168,12 +4202,50 @@ function sideForCable(cableId) {
   return null; // both sides taken by other cables
 }
 
+// The connection a fiber participates in, or null.
+function findFiberConnection(cableId, fiberIdx) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c) return null;
+  const sp = (c.splices || []).find(s =>
+    (s.from_cable_id === cableId && s.from_fiber === fiberIdx) ||
+    (s.to_cable_id === cableId && s.to_fiber === fiberIdx));
+  if (sp) return { type: 'splice', id: sp.id };
+  for (const spl of (c.splitters || [])) {
+    if (spl.input_cable_id === cableId && spl.input_fiber === fiberIdx) return { type: 'splitter', splitterId: spl.id, key: 'in' };
+    const o = (spl.outputs || []).find(x => x.output_cable_id === cableId && x.output_fiber === fiberIdx);
+    if (o) return { type: 'splitter', splitterId: spl.id, key: 'leg-' + o.leg_index };
+  }
+  return null;
+}
+
 function selectFiber(cableId, fiberIdx, event) {
   if (state.spliceDeleteMode) { return breakSpliceClick(cableId, fiberIdx, event); }
   if (splitterAssign) { return assignSplitterFiber(cableId, fiberIdx); }
   const sel = state.spliceSel;
   const shift = event && event.shiftKey;
   const toggle = event && (event.ctrlKey || event.metaKey);
+
+  // Plain click on an already-connected fiber → highlight its connection.
+  if (!shift && !toggle) {
+    const conn = findFiberConnection(cableId, fiberIdx);
+    if (conn) {
+      state.spliceSel = { a: null, b: null };
+      if (conn.type === 'splice') {
+        state.selectedSplice = (state.selectedSplice === conn.id) ? null : conn.id;
+        state.selectedSplitterLink = null;
+      } else {
+        const cur = state.selectedSplitterLink;
+        const same = cur && cur.splitterId === conn.splitterId && cur.key === conn.key;
+        state.selectedSplitterLink = same ? null : { splitterId: conn.splitterId, key: conn.key };
+        state.selectedSplice = null;
+      }
+      renderPanel();
+      return;
+    }
+    // free fiber → clear any active connection highlight
+    state.selectedSplice = null;
+    state.selectedSplitterLink = null;
+  }
 
   let key = sideForCable(cableId);
   if (key === null) {                 // both sides are other cables → start fresh A here
