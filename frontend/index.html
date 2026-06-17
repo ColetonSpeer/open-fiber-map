@@ -3857,6 +3857,17 @@ function drawSpliceLines() {
     const c2x = b.x + (b.side === 'L' ? off : -off);
     return { d: `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`, c1x, c2x };
   };
+  // Split the splice cubic at its midpoint (De Casteljau) so each half can be
+  // stroked in its own fiber's color, meeting at the splice triangle.
+  const halfCurves = (a, b, c1x, c2x) => {
+    const P0 = { x: a.x, y: a.y }, P1 = { x: c1x, y: a.y }, P2 = { x: c2x, y: b.y }, P3 = { x: b.x, y: b.y };
+    const mid = (p, q) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+    const m01 = mid(P0, P1), m12 = mid(P1, P2), m23 = mid(P2, P3);
+    const m012 = mid(m01, m12), m123 = mid(m12, m23);
+    const m = mid(m012, m123);
+    const dOf = (q0, q1, q2, q3) => `M ${q0.x} ${q0.y} C ${q1.x} ${q1.y}, ${q2.x} ${q2.y}, ${q3.x} ${q3.y}`;
+    return { first: dOf(P0, m01, m012, m), second: dOf(m, m123, m23, P3), mid: m };
+  };
   const addPath = (d, attrs) => {
     const path = document.createElementNS(SVG_NS, 'path');
     path.setAttribute('d', d);
@@ -3872,28 +3883,36 @@ function drawSpliceLines() {
       const a = anchor(s.from_cable_id, s.from_fiber);
       const b = anchor(s.to_cable_id, s.to_fiber);
       if (!a || !b) return;
-      const fc = FIBER_COLORS[s.from_fiber % 12];
+      const fcFrom = FIBER_COLORS[s.from_fiber % 12];
+      const fcTo = FIBER_COLORS[s.to_fiber % 12];
       const isPass = s.splice_type === 'pass-through';
       const isSel = s.id === state.selectedSplice;
-      const { d, c1x, c2x } = curveD(a, b);
-      const path = addPath(d, {
-        stroke: fc.bg, 'stroke-width': isSel ? 4 : 2.25, 'stroke-linecap': 'round',
+      const { c1x, c2x } = curveD(a, b);
+      const halves = halfCurves(a, b, c1x, c2x);
+      const baseAttrs = {
+        'stroke-width': isSel ? 4 : 2.25, 'stroke-linecap': 'round',
         opacity: isSel ? 1 : 0.9, ...(isPass ? { 'stroke-dasharray': '5 4' } : {}),
-      });
-      path.addEventListener('click', (e) => {
+      };
+      const onClick = (e) => {
         e.stopPropagation();
         if (state.spliceDeleteMode) { breakSpliceById(s.id); return; }
         state.selectedSplice = (state.selectedSplice === s.id) ? null : s.id;
         renderPanel();
-      });
+      };
+      // Two halves, each in its own fiber's colour, meeting at the splice triangle.
+      addPath(halves.first, { ...baseAttrs, stroke: fcFrom.bg }).addEventListener('click', onClick);
+      addPath(halves.second, { ...baseAttrs, stroke: fcTo.bg }).addEventListener('click', onClick);
       if (!isPass) {
-        const mx = 0.125 * a.x + 0.375 * c1x + 0.375 * c2x + 0.125 * b.x;
-        const my = 0.5 * (a.y + b.y);
+        const mx = halves.mid.x, my = halves.mid.y;
+        const sameColor = fcFrom.bg === fcTo.bg;
         const node = document.createElementNS(SVG_NS, 'rect');
         node.setAttribute('x', mx - 4); node.setAttribute('y', my - 4);
         node.setAttribute('width', 8); node.setAttribute('height', 8);
         node.setAttribute('transform', `rotate(45 ${mx} ${my})`);
-        node.setAttribute('fill', fc.bg); node.setAttribute('stroke', fc.border); node.setAttribute('stroke-width', 1.5);
+        node.setAttribute('fill', sameColor ? fcFrom.bg : '#ffffff');
+        node.setAttribute('stroke', sameColor ? fcFrom.border : '#666');
+        node.setAttribute('stroke-width', 1.5);
+        node.addEventListener('click', onClick);
         svg.appendChild(node);
       }
     });
