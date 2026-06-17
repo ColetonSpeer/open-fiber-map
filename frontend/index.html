@@ -129,9 +129,11 @@ body.dark-mode .sd-splrow.assigning { background: #3a2c17; }
 .sd-side-btn:hover { color: #1565c0; border-color: #1565c0; }
 .sd-delbtn.active { background: #c62828; border-color: #c62828; color: #fff; }
 .sd-diagram.del-mode .fiber-row { cursor: pointer; }
-.sd-diagram.del-mode .fiber-row.connected:hover { background: #ffebee; outline: 1.5px solid #ef5350; }
+.sd-diagram.del-mode .fiber-row.connected:hover,
+.sd-diagram.del-mode .sd-splrow:hover { background: #ffebee; outline: 1.5px solid #ef5350; }
 .sd-diagram.del-mode .sd-svg path { cursor: pointer; }
-body.dark-mode .sd-diagram.del-mode .fiber-row.connected:hover { background: #3a1f1f; outline-color: #ef5350; }
+body.dark-mode .sd-diagram.del-mode .fiber-row.connected:hover,
+body.dark-mode .sd-diagram.del-mode .sd-splrow:hover { background: #3a1f1f; outline-color: #ef5350; }
 body.dark-mode .sd-typebtn { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
 body.dark-mode .sd-typebtn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
 body.dark-mode .sd-port { background: #5b6b7a; }
@@ -3514,7 +3516,7 @@ function renderPanel() {
     </div>`;
   } else if (state.spliceDeleteMode) {
     html += `<div class="sel-bar" style="background:#ffebee;border-color:#ef9a9a;color:#c62828;flex-wrap:wrap;">
-      <span>✂ Delete mode — click a connected fiber (or its line) to break the splice · Shift-click = range</span>
+      <span>✂ Delete mode — click a connected fiber, a splitter leg/IN row, or a line to break it · Shift-click = range</span>
       <button onclick="toggleSpliceDeleteMode()" title="Exit delete mode" style="color:#c62828;">×</button>
     </div>`;
   }
@@ -3895,7 +3897,8 @@ function drawSpliceLines() {
       const p = splitterAnchor(sp.id, spKey);
       if (!f || !p) return;
       const fc = FIBER_COLORS[fiberIdx % 12];
-      addPath(curveD(f, p).d, { stroke: fc.bg, 'stroke-width': 2.25, 'stroke-linecap': 'round', opacity: 0.95 });
+      const path = addPath(curveD(f, p).d, { stroke: fc.bg, 'stroke-width': 2.25, 'stroke-linecap': 'round', opacity: 0.95 });
+      if (state.spliceDeleteMode) path.addEventListener('click', (e) => { e.stopPropagation(); unbindSplitterLink(sp.id, spKey); });
       const dot = document.createElementNS(SVG_NS, 'circle');
       dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y); dot.setAttribute('r', 3.8);
       dot.setAttribute('fill', fc.bg); dot.setAttribute('stroke', '#ff9800'); dot.setAttribute('stroke-width', 1.5);
@@ -4024,6 +4027,9 @@ async function doAddSplitter() {
 }
 
 function beginSplitterAssign(splitterId, target) {
+  if (state.spliceDeleteMode) {
+    return unbindSplitterLink(splitterId, target === 'input' ? 'in' : 'leg-' + target);
+  }
   splitterAssign = { splitterId, target };
   state.spliceSel = { a: null, b: null };
   renderPanel();
@@ -4162,12 +4168,18 @@ async function breakSpliceClick(cableId, fiberIdx, event) {
     (s.from_cable_id === cableId && s.from_fiber === fi) ||
     (s.to_cable_id === cableId && s.to_fiber === fi)
   )).map(s => s.id);
-  if (!ids.length) { renderPanel(); return; }
-  await Promise.all(ids.map(id => api('DELETE', '/splices/' + id).catch(() => {})));
-  c.splices = c.splices.filter(s => !ids.includes(s.id));
-  if (ids.includes(state.selectedSplice)) state.selectedSplice = null;
+  if (ids.length) {
+    await Promise.all(ids.map(id => api('DELETE', '/splices/' + id).catch(() => {})));
+    c.splices = c.splices.filter(s => !ids.includes(s.id));
+    if (ids.includes(state.selectedSplice)) state.selectedSplice = null;
+  }
+  const unbound = await unbindSplitterAt(cableId, fibers);
+  if (!ids.length && !unbound) { renderPanel(); return; }
   renderPanel();
-  flashHint(`Broke ${ids.length} splice${ids.length !== 1 ? 's' : ''}.`);
+  const parts = [];
+  if (ids.length) parts.push(`${ids.length} splice${ids.length !== 1 ? 's' : ''}`);
+  if (unbound) parts.push(`${unbound} splitter link${unbound !== 1 ? 's' : ''}`);
+  flashHint(`Broke ${parts.join(' + ')}.`);
 }
 
 // Delete-mode: break one splice by id (used when clicking a connector line).
@@ -4178,6 +4190,45 @@ async function breakSpliceById(id) {
   if (state.selectedSplice === id) state.selectedSplice = null;
   renderPanel();
   flashHint('Splice broken.');
+}
+
+// Delete-mode: unbind any splitter input/leg sitting on the given fibers of a cable.
+async function unbindSplitterAt(cableId, fibers) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c) return 0;
+  let count = 0;
+  for (const sp of (c.splitters || [])) {
+    const payload = {};
+    if (sp.input_cable_id === cableId && fibers.includes(sp.input_fiber)) {
+      payload.input_cable_id = null; payload.input_fiber = null; count++;
+    }
+    const legs = (sp.outputs || []).filter(o => o.output_cable_id === cableId && fibers.includes(o.output_fiber));
+    if (legs.length) {
+      payload.outputs = legs.map(o => ({ leg_index: o.leg_index, output_cable_id: null, output_fiber: null, tap_percent: o.tap_percent, loss_db: o.loss_db, label: o.label }));
+      count += legs.length;
+    }
+    if (payload.input_cable_id === null || payload.outputs) {
+      try { Object.assign(sp, await api('PUT', '/splitters/' + sp.id, payload)); } catch (_) {}
+    }
+  }
+  return count;
+}
+
+// Delete-mode: remove one splitter binding (used when clicking a splitter wiring line).
+async function unbindSplitterLink(spId, spKey) {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  const sp = c && (c.splitters || []).find(x => x.id === spId);
+  if (!sp) return;
+  const payload = {};
+  if (spKey === 'in') { payload.input_cable_id = null; payload.input_fiber = null; }
+  else {
+    const legIdx = parseInt(spKey.slice(4), 10);
+    const o = (sp.outputs || []).find(x => x.leg_index === legIdx);
+    payload.outputs = [{ leg_index: legIdx, output_cable_id: null, output_fiber: null, tap_percent: o?.tap_percent, loss_db: o?.loss_db, label: o?.label }];
+  }
+  try { Object.assign(sp, await api('PUT', '/splitters/' + spId, payload)); } catch (_) {}
+  renderPanel();
+  flashHint('Splitter link removed.');
 }
 
 async function deleteSplice(spliceId) {
