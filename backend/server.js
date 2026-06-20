@@ -1925,28 +1925,40 @@ const DRIVERS = {
   //     tx-opt-level          6.51   (ONT upstream Tx power, dBm)
   //     ne-opt-signal-level -16.90   (OLT-side Rx of this ONT)
   async calix(device, ports) {
+    // One SSH session, two queries:
+    //  • `show ont detail`              → per-ONT optical (opt-signal-level / tx-opt-level)
+    //  • `show interface ethernet module` → per-uplink SFP/QSFP DOM (rx-power / tx-power / temperature),
+    //     one block per port headed "interface ethernet 1/1/x1" (full shelf/slot/port path).
     const text = await sshShellRun({
       host: device.host, port: device.port || 22,
       username: device.username, password: device.secret,
-      commands: ['paginate false', 'show ont detail'],
+      commands: ['paginate false', 'show ont detail', 'show interface ethernet module'],
+      overallMs: 60000,
     });
     const readings = [];
-    let cur = null;
+    let cur = null, mode = null;
     const num = (s) => round2(parseFloat(s));
     for (const raw of text.split('\n')) {
       const line = raw.replace(/\r/g, '').trim();
       let m;
       if ((m = line.match(/^ont\s+(\S+)/))) {
         cur = { interface_name: m[1], rx_dbm: null, tx_dbm: null, temperature_c: null };
-        readings.push(cur);
-      } else if (cur && (m = line.match(/^opt-signal-level\s+(-?[\d.]+)/))) {
-        cur.rx_dbm = num(m[1]);                      // note: ne-opt-signal-level won't match (starts with "ne-")
-      } else if (cur && (m = line.match(/^tx-opt-level\s+(-?[\d.]+)/))) {
-        cur.tx_dbm = num(m[1]);
+        readings.push(cur); mode = 'ont';
+      } else if ((m = line.match(/^interface ethernet\s+(\S+)/))) {
+        cur = { interface_name: m[1], rx_dbm: null, tx_dbm: null, temperature_c: null };
+        readings.push(cur); mode = 'eth';
+      } else if (cur && mode === 'ont') {
+        if ((m = line.match(/^opt-signal-level\s+(-?[\d.]+)/))) cur.rx_dbm = num(m[1]);   // ne-opt-signal-level won't match (starts "ne-")
+        else if ((m = line.match(/^tx-opt-level\s+(-?[\d.]+)/))) cur.tx_dbm = num(m[1]);
+      } else if (cur && mode === 'eth') {
+        // e.g. rx-power  "0.1376 mW/-8.613815 dBm"   temperature  "50.95 C"
+        if ((m = line.match(/^rx-power\s+".*?\/\s*(-?[\d.]+)\s*dBm/i))) cur.rx_dbm = num(m[1]);
+        else if ((m = line.match(/^tx-power\s+".*?\/\s*(-?[\d.]+)\s*dBm/i))) cur.tx_dbm = num(m[1]);
+        else if ((m = line.match(/^temperature\s+"\s*(-?[\d.]+)\s*C/i))) cur.temperature_c = num(m[1]);
       }
     }
     const out = readings.filter(r => r.rx_dbm != null || r.tx_dbm != null);
-    if (!out.length) throw new Error('No ONT optical levels parsed from "show ont detail" — check credentials / CLI access.');
+    if (!out.length) throw new Error('No optical levels parsed from E7 CLI — check credentials / CLI access.');
     return out;
   },
 
@@ -2020,12 +2032,30 @@ async function pollDevice(deviceRow) {
   );
   const ports = portsR.rows;
   const readings = await driver(device, ports) || [];
-  const byLabel = new Map(ports.map(p => [String(p.port_label).toLowerCase(), p.id]));
+  // Link a reading to an equipment port: exact label match first; otherwise, if
+  // the name's trailing token (after the last "/") uniquely matches one port
+  // label, use that. Links Calix uplinks named "1/1/x1" to ports labelled
+  // "1/1/x1" (chassis template) or "x1" (single-card), without cross-card collisions.
+  const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
+  const exact = new Map();
+  const byToken = new Map();
+  for (const p of ports) {
+    const lbl = norm(p.port_label);
+    if (!exact.has(lbl)) exact.set(lbl, p.id);
+    const tok = lbl.split('/').pop();
+    (byToken.get(tok) || byToken.set(tok, []).get(tok)).push(p.id);
+  }
+  const matchPort = (ifname) => {
+    const n = norm(ifname);
+    if (exact.has(n)) return exact.get(n);
+    const hits = byToken.get(n.split('/').pop());
+    return hits && hits.length === 1 ? hits[0] : null;
+  };
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     for (const r of readings) {
-      const portId = byLabel.get(String(r.interface_name || '').toLowerCase()) || null;
+      const portId = matchPort(r.interface_name);
       await client.query(
         `INSERT INTO optical_measurements (device_id, port_id, interface_name, rx_dbm, tx_dbm, temperature_c)
          VALUES ($1,$2,$3,$4,$5,$6)`,
