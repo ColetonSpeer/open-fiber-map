@@ -4,6 +4,8 @@ A self-hosted fiber network mapping application. Track fiber routes, closures, p
 
 **Tech stack:** Node.js · Express · PostgreSQL + PostGIS · Apache · Leaflet
 
+**Docs:** [Calix E7 optical monitoring — least‑privilege account](docs/calix-e7-monitoring.md)
+
 ---
 
 ## Features
