@@ -396,6 +396,7 @@ body.dark-mode select, body.dark-mode textarea {
     <button class="tb" id="btn-closure" onclick="setMode('closure')">+ Closure</button>
     <button class="tb" id="btn-route" onclick="setMode('route')">+ Fiber</button>
     <button class="tb" id="btn-pole" onclick="setMode('pole')">+ Pole</button>
+    <button class="tb" id="btn-ped" onclick="setMode('ped')">+ Ped</button>
     <button class="tb" id="btn-site" onclick="pickSiteType()">+ Site</button>
     <button class="tb" id="btn-delete" onclick="setMode('delete')" style="color:#c62828;">Delete Area</button>
     <button class="tb" id="btn-edit" onclick="setMode('edit')" style="color:#1565c0;">✏ Edit</button>
@@ -608,7 +609,7 @@ function applyRoleUi() {
       ui.insertAdjacentElement('afterend', badge);
     }
     // Hide live-only tools
-    ['btn-closure', 'btn-site'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
+    ['btn-closure', 'btn-ped', 'btn-site'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
     // Lock the planning toggle on
     const pb = document.getElementById('btn-plan');
     if (pb) { pb.classList.add('active'); pb.style.opacity = '0.7'; pb.style.cursor = 'default'; pb.title = 'Plan-only accounts always work in Planning Mode'; }
@@ -848,6 +849,8 @@ function onMapClick(e) {
     promptCreateClosure(placeLatlng, snappedRouteId, snappedPoleId);
   } else if (state.mode === 'pole') {
     promptCreatePole(e.latlng);
+  } else if (state.mode === 'ped') {
+    promptCreatePed(e.latlng);
   } else if (state.mode === 'site') {
     promptCreateSite(e.latlng, state.pendingSiteType);
   } else if (state.mode === 'route') {
@@ -1291,7 +1294,7 @@ function onMapMouseMove(e) {
   updatePreview(e);
 }
 
-const _PLACEMENT_TYPES = { closure: 'closure', route: 'route', pole: 'pole', site: 'site' };
+const _PLACEMENT_TYPES = { closure: 'closure', route: 'route', pole: 'pole', ped: 'pole', site: 'site' };
 
 function getActiveLayer() {
   if (state.activeLayerId === null) return null;
@@ -2242,6 +2245,7 @@ function setMode(m) {
     closure: 'Click on the map to place a splice closure',
     route: 'Click points to draw fiber, double-click or switch tools to finish',
     pole: 'Click on the map to place a pole',
+    ped: 'Click on the map to place a pedestal (pole + closure)',
     site: 'Click on the map to place the site',
     delete: 'Drag a rectangle to select and delete items',
     edit: 'Drag poles and closures to move; click a fiber route to edit vertices'
@@ -2404,6 +2408,9 @@ function renderMap() {
   // Render closures
   state.closures.forEach(c => {
     if (!isItemVisible(c)) return;
+    // A closure on a pedestal is represented by the pedestal's own marker — don't
+    // draw a second overlapping marker for it.
+    if (c.pole_id && state.poles.some(p => p.id === c.pole_id && p.structure_type === 'pedestal')) return;
     const [lng, lat] = c.geom.coordinates;
     // Cable counts are only loaded once a closure's panel is opened; show the
     // fiber total when known, otherwise leave the marker blank (never "?").
@@ -2466,23 +2473,27 @@ function renderMap() {
   state.poles.forEach(p => {
     if (!isItemVisible(p)) return;
     const isPlan = !!p.is_plan;
-    if (!state.planMode && isPlan) return;        // plan objects hidden outside planning mode
-    const dimmed = state.planMode && !isPlan;     // live network = read-only reference in plan mode
+    // Symmetric dimming: an object is dimmed/read-only when its plan-ness doesn't
+    // match the current mode (plan objects dim in normal mode, live objects dim in plan mode).
+    const dimmed = state.planMode ? !isPlan : isPlan;
+    const isPed = p.structure_type === 'pedestal';
     const [lng, lat] = p.geom.coordinates;
     const poleClosureCount = state.closures.filter(c => c.pole_id === p.id).length;
     const hasClosure = poleClosureCount > 0;
     const countBadge = poleClosureCount > 1
       ? `<div style="position:absolute;top:-6px;right:-6px;width:14px;height:14px;background:#1565c0;color:white;border-radius:50%;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;">${poleClosureCount}</div>`
       : '';
-    const poleFill = isPlan ? '#7E57C2' : '#5D4037';
+    const poleFill = isPlan ? '#7E57C2' : (isPed ? '#00695C' : '#5D4037');
+    const sz = isPed ? 13 : 10;                      // pedestals render as a slightly larger square
+    const radius = isPed ? '2px' : '50%';
     const icon = L.divIcon({
       className: '',
-      html: `<div style="position:relative;width:10px;height:10px;">
-        <div style="width:10px;height:10px;background:${poleFill};border:2px solid ${hasClosure ? '#1565c0' : 'white'};border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3);opacity:${dimmed ? 0.3 : 1};"></div>
+      html: `<div style="position:relative;width:${sz}px;height:${sz}px;">
+        <div style="width:${sz}px;height:${sz}px;background:${poleFill};border:2px solid ${hasClosure ? '#1565c0' : 'white'};border-radius:${radius};box-shadow:0 1px 3px rgba(0,0,0,.3);opacity:${dimmed ? 0.3 : 1};box-sizing:border-box;"></div>
         ${countBadge}
         <div class="pole-label">${h(p.name)}</div>
       </div>`,
-      iconSize: [10, 10], iconAnchor: [5, 5]
+      iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2]
     });
     const poleIsEdit = state.mode === 'edit' && !dimmed;
     const marker = L.marker([lat, lng], { icon, draggable: poleIsEdit }).addTo(map);
@@ -2577,18 +2588,18 @@ function renderMap() {
   state.routes.forEach(r => {
     if (!isItemVisible(r)) return;
     const isPlan = !!r.is_plan;
-    if (!state.planMode && isPlan) return;        // plan routes hidden outside planning mode
-    const dimmed = state.planMode && !isPlan;     // live network = read-only reference in plan mode
+    // Symmetric dimming (see poles): dimmed when plan-ness doesn't match current mode.
+    const dimmed = state.planMode ? !isPlan : isPlan;
     const coords = r.geom.coordinates.map(c => [c[1], c[0]]);
     if (_traceRouteIds.has(r.id)) {
       _traceHalos.push(L.polyline(coords, { color: '#ffeb3b', weight: 12, opacity: 0.9 }).addTo(map));
     }
     const lineColor = isPlan ? (r.color && r.color !== '#FF8800' ? r.color : '#7E57C2') : (r.color || '#FF8800');
     const style = { color: lineColor, weight: 4, opacity: dimmed ? 0.3 : 0.85 };
-    if (isPlan) style.dashArray = '8,6';
+    if (r.buried) style.dashArray = '7,7';        // dashed = buried (plan is shown via colour + dim, no dash)
     const line = L.polyline(coords, style).addTo(map);
     const fcLabel = r.fiber_count ? ` (${r.fiber_count}F)` : '';
-    const tip = (isPlan ? 'PLAN: ' : '') + r.name + fcLabel;
+    const tip = (isPlan ? 'PLAN: ' : '') + r.name + fcLabel + (r.buried ? ' · buried' : '');
     // Transparent wide line so the thin route is easy to click/hover.
     const hit = L.polyline(coords, { color: '#000', opacity: 0, weight: 16, interactive: !dimmed }).addTo(map);
     _routeHits.push(hit);
@@ -2889,6 +2900,7 @@ async function openEditModal(entityType, entityId, obj) {
          <label>Color</label><input id="ef-color" type="color" value="${obj.color || '#FF8800'}">`
       : `<label>Fiber count</label><input id="ef-fc" type="number" min="1" max="288" value="${obj.fiber_count || 12}">
          <label>Color</label><input id="ef-color" type="color" value="${obj.color || '#FF8800'}">`;
+    standardFields += `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-weight:normal;"><input type="checkbox" id="ef-buried" ${obj.buried ? 'checked' : ''}> Buried (underground)</label>`;
     if (state.poles.length > 0) {
       standardFields += `<label>Attached poles</label>
         <div style="max-height:90px;overflow-y:auto;border:1px solid #ccc;border-radius:4px;padding:4px 8px;background:#fafafa;">
@@ -2944,8 +2956,9 @@ async function openEditModal(entityType, entityId, obj) {
         const fcEl = document.getElementById('ef-fc');
         const fc = obj.is_plan ? null : (parseInt(fcEl && fcEl.value) || obj.fiber_count || 12);
         const color = document.getElementById('ef-color').value;
+        const buried = document.getElementById('ef-buried').checked;
         const attachedPoles = [...document.querySelectorAll('.pole-attach:checked')].map(cb => parseInt(cb.value));
-        const updated = await api('PUT', `/routes/${entityId}`, { name, notes, fiber_count: fc, color, attached_poles: attachedPoles });
+        const updated = await api('PUT', `/routes/${entityId}`, { name, notes, fiber_count: fc, color, buried, attached_poles: attachedPoles });
         const idx = state.routes.findIndex(r => r.id === entityId);
         if (idx >= 0) state.routes[idx] = { ...state.routes[idx], ...updated };
         Object.assign(obj, updated);
@@ -2995,6 +3008,7 @@ async function openViewModal(entityType, entityId, obj) {
       rows += `<div class="view-row"><span class="view-label">Length</span><span>${lenStr}</span></div>`;
     }
     rows += `<div class="view-row"><span class="view-label">Poles</span><span>${(obj.attached_poles || []).length}</span></div>`;
+    rows += `<div class="view-row"><span class="view-label">Placement</span><span>${obj.buried ? 'Buried (underground)' : 'Aerial'}</span></div>`;
   }
   if (obj.is_plan) {
     rows += `<div class="view-row"><span class="view-label">Status</span><span><span style="background:#7E57C2;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">PLAN</span></span></div>`;
@@ -3093,9 +3107,13 @@ async function openViewModal(entityType, entityId, obj) {
 }
 
 function handlePoleClick(poleId) {
-  // Open the pole's detail card directly; it lists attached closures with
-  // buttons that jump to the splice panel (no intermediate picker popup).
   const pole = state.poles.find(p => p.id === poleId);
+  // A pedestal is essentially a closure on a structure — jump straight to its
+  // splice panel. Otherwise open the pole detail card (which lists any closures).
+  if (pole && pole.structure_type === 'pedestal') {
+    const cls = state.closures.filter(c => c.pole_id === poleId);
+    if (cls.length === 1) { openClosurePanel(cls[0].id); return; }
+  }
   openViewModal('pole', poleId, pole);
 }
 
@@ -3231,6 +3249,32 @@ function promptCreatePole(latlng) {
   });
 }
 
+// A pedestal is a pole (structure_type=pedestal) that carries a closure. In live
+// mode we also auto-create the closure on it; in plan mode the closure is added
+// when the pedestal is built live (closures aren't plan objects).
+function promptCreatePed(latlng) {
+  const n = state.poles.filter(p => p.structure_type === 'pedestal').length + 1;
+  showModal('Add Pedestal', `
+    <label>Name</label><input id="m-name" value="PED-${n}">
+    ${buildOnCreateHtml('pole')}
+  `, async () => {
+    const name = document.getElementById('m-name').value.trim();
+    if (!name) return false;
+    const p = await api('POST', '/poles', { name, lat: latlng.lat, lng: latlng.lng, layer_id: state.activeLayerId, is_plan: state.planMode, structure_type: 'pedestal' });
+    state.poles.push(p);
+    await saveOnCreateFields('pole', p.id);
+    if (!state.planMode) {
+      const c = await api('POST', '/closures', { name, lat: latlng.lat, lng: latlng.lng, pole_id: p.id, layer_id: state.activeLayerId });
+      c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
+      if (!c.cables) c.cables = [];
+      state.closures.push(c);
+    }
+    renderMap();
+    setMode('select');
+    return true;
+  });
+}
+
 function pickSiteType() {
   const activeLayer = getActiveLayer();
   if (activeLayer?.allowed_types?.length > 0 && !activeLayer.allowed_types.includes('site')) {
@@ -3320,6 +3364,7 @@ function promptCreateRoute(points, tempLine, snapClosures, snapSites) {
     <label>Name</label><input id="m-name" value="Fiber-${state.routes.length + 1}">
     ${planFc}
     <label>Color</label><input id="m-color" type="color" value="#FF8800">
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-weight:normal;"><input type="checkbox" id="m-buried"> Buried (underground)</label>
     <label>Notes (optional)</label><textarea id="m-notes" rows="2"></textarea>
     ${poleNote}
     ${siteNote}
@@ -3330,11 +3375,12 @@ function promptCreateRoute(points, tempLine, snapClosures, snapSites) {
     const fcEl = document.getElementById('m-fc');
     const fiberCount = state.planMode ? null : (parseInt(fcEl && fcEl.value) || 12);
     const color = document.getElementById('m-color').value;
+    const buried = document.getElementById('m-buried').checked;
     const notes = document.getElementById('m-notes').value.trim();
     if (!name) return false;
     clearPreview();
     const lnglat = points.map(p => [p[1], p[0]]);
-    const r = await api('POST', '/routes', { name, notes: notes || null, fiber_count: fiberCount, color, attached_poles: attachedAtDraw, points: lnglat, attached_sites: attachedSites, layer_id: state.activeLayerId, is_plan: state.planMode });
+    const r = await api('POST', '/routes', { name, notes: notes || null, fiber_count: fiberCount, color, buried, attached_poles: attachedAtDraw, points: lnglat, attached_sites: attachedSites, layer_id: state.activeLayerId, is_plan: state.planMode });
     state.drawAttachedPoles = [];
     state.routes.push(r);
 

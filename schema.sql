@@ -657,7 +657,8 @@ CREATE TABLE public.poles (
     created_by integer,
     created_at timestamp without time zone DEFAULT now(),
     layer_id integer,
-    is_plan boolean DEFAULT false
+    is_plan boolean DEFAULT false,
+    structure_type character varying(20) DEFAULT 'pole'
 );
 
 
@@ -697,7 +698,8 @@ CREATE TABLE public.routes (
     fiber_count integer DEFAULT 12,
     attached_sites integer[] DEFAULT '{}'::integer[],
     layer_id integer,
-    is_plan boolean DEFAULT false
+    is_plan boolean DEFAULT false,
+    buried boolean DEFAULT false
 );
 
 
