@@ -1802,6 +1802,8 @@ const http = require('http');
 const https = require('https');
 let snmp = null;
 try { snmp = require('net-snmp'); } catch (_) { /* optional — only Juniper needs it */ }
+let SSHClient = null;
+try { SSHClient = require('ssh2').Client; } catch (_) { /* optional — only Calix E7 SSH needs it */ }
 
 // Juniper DOM MIB (mib-jnx-dom) — jnxDomCurrentTable, indexed by ifIndex.
 // These column OIDs and the dBm scaling are the common Junos values; if a
@@ -1827,6 +1829,44 @@ function snmpSubtree(session, baseOid) {
       },
       (error) => error ? reject(error) : resolve(out)
     );
+  });
+}
+
+// Open an SSH shell, run commands sequentially, and return all output. Resolves
+// when the device goes quiet (idleMs) after the last command. Used for network
+// OS CLIs (e.g. Calix E7) that don't support an exec channel. Auto-advances any
+// "--More--" pager just in case.
+function sshShellRun({ host, port = 22, username, password, commands, idleMs = 2500, overallMs = 30000 }) {
+  return new Promise((resolve, reject) => {
+    if (!SSHClient) return reject(new Error('SSH polling requires the ssh2 package (npm install ssh2).'));
+    const conn = new SSHClient();
+    let out = '', stream = null, i = 0, idle = null, settling = false;
+    const fail = (e) => { try { conn.end(); } catch (_) {} reject(e instanceof Error ? e : new Error(String(e))); };
+    const overall = setTimeout(() => fail(new Error('SSH session timed out')), overallMs);
+    const finish = () => { clearTimeout(overall); if (idle) clearTimeout(idle); try { conn.end(); } catch (_) {} resolve(out); };
+    const next = () => {
+      if (i >= commands.length) { settling = true; arm(); return; }
+      stream.write(commands[i++] + '\n');
+      arm();
+    };
+    const arm = () => { if (idle) clearTimeout(idle); idle = setTimeout(() => settling ? finish() : next(), idleMs); };
+    conn.on('ready', () => {
+      conn.shell((err, s) => {
+        if (err) return fail(err);
+        stream = s;
+        s.on('data', (d) => {
+          const t = d.toString('utf8');
+          out += t;
+          if (/--More--|<space>|Press any/i.test(t)) s.write(' ');
+          arm();
+        });
+        s.on('close', () => finish());
+        setTimeout(next, 1200); // let the login banner/prompt settle first
+      });
+    });
+    conn.on('keyboard-interactive', (n, in_, l, prompts, cb) => cb([password]));
+    conn.on('error', fail);
+    conn.connect({ host, port, username, password, tryKeyboard: true, readyTimeout: 15000 });
   });
 }
 
@@ -1877,40 +1917,37 @@ const DRIVERS = {
     });
   },
 
-  // Calix — SMx / Calix Cloud northbound REST. Auth for a bearer token, then
-  // read ONT/port optical status. Endpoint paths vary by SMx version, so the
-  // base path is configurable (device.base_path) and the JSON parse is lenient.
+  // Calix E7 — SSH CLI. The E7 chassis has no REST API; we log in over SSH and
+  // run `show ont detail`, which prints a per-ONT block with the optical levels:
+  //   ont <SERIAL>
+  //    detail
+  //     opt-signal-level    -16.18   (ONT downstream Rx power, dBm)
+  //     tx-opt-level          6.51   (ONT upstream Tx power, dBm)
+  //     ne-opt-signal-level -16.90   (OLT-side Rx of this ONT)
   async calix(device, ports) {
-    const scheme = (device.port === 80 || device.port === 8080) ? 'http' : 'https';
-    const origin = `${scheme}://${device.host}:${device.port || 18443}`;
-    const base = device.base_path || '/rest/v1';
-
-    // 1) Authenticate → token
-    const auth = await httpRequest(`${origin}${base}/auth/token`, {
-      method: 'POST', body: { username: device.username, password: device.secret },
+    const text = await sshShellRun({
+      host: device.host, port: device.port || 22,
+      username: device.username, password: device.secret,
+      commands: ['paginate false', 'show ont detail'],
     });
-    if (auth.status >= 400 || !auth.json) {
-      throw new Error(`Calix auth failed (HTTP ${auth.status})`);
+    const readings = [];
+    let cur = null;
+    const num = (s) => round2(parseFloat(s));
+    for (const raw of text.split('\n')) {
+      const line = raw.replace(/\r/g, '').trim();
+      let m;
+      if ((m = line.match(/^ont\s+(\S+)/))) {
+        cur = { interface_name: m[1], rx_dbm: null, tx_dbm: null, temperature_c: null };
+        readings.push(cur);
+      } else if (cur && (m = line.match(/^opt-signal-level\s+(-?[\d.]+)/))) {
+        cur.rx_dbm = num(m[1]);                      // note: ne-opt-signal-level won't match (starts with "ne-")
+      } else if (cur && (m = line.match(/^tx-opt-level\s+(-?[\d.]+)/))) {
+        cur.tx_dbm = num(m[1]);
+      }
     }
-    const token = auth.json.token || auth.json.access_token || auth.json.sessionId;
-    if (!token) throw new Error('Calix auth returned no token');
-
-    // 2) Fetch optical status for this device's ONTs/ports
-    const opt = await httpRequest(`${origin}${base}/devices/${encodeURIComponent(device.username && device.host)}/optical`, {
-      method: 'GET', headers: { Authorization: `Bearer ${token}` },
-    });
-    if (opt.status >= 400 || !opt.json) throw new Error(`Calix optical query failed (HTTP ${opt.status})`);
-
-    // Lenient parse: accept {interfaces:[...]} or a bare array. Each item may
-    // use rxPower/txPower or rx_dbm/tx_dbm naming.
-    const items = Array.isArray(opt.json) ? opt.json
-      : (opt.json.interfaces || opt.json.onts || opt.json.data || []);
-    return items.map(it => ({
-      interface_name: it.interface || it.name || it.ontId || it.port,
-      rx_dbm: round2(parseFloat(it.rxPower ?? it.rx_dbm ?? it.rxOpticalPower)),
-      tx_dbm: round2(parseFloat(it.txPower ?? it.tx_dbm ?? it.txOpticalPower)),
-      temperature_c: round2(parseFloat(it.temperature ?? it.temp)),
-    })).filter(r => r.interface_name);
+    const out = readings.filter(r => r.rx_dbm != null || r.tx_dbm != null);
+    if (!out.length) throw new Error('No ONT optical levels parsed from "show ont detail" — check credentials / CLI access.');
+    return out;
   },
 
   // Arista — eAPI (JSON-RPC over HTTP/S). "show interfaces transceiver" returns

@@ -249,7 +249,7 @@
     <label class="modal-label">Vendor / source</label>
     <select id="dm-vendor" class="modal-input" onchange="updateDeviceModalFields()">
       <option value="simulator">Simulator (test, no device)</option>
-      <option value="calix">Calix (SMx / Cloud REST)</option>
+      <option value="calix">Calix E7 (SSH CLI)</option>
       <option value="arista">Arista (eAPI)</option>
       <option value="juniper">Juniper (SNMP/NETCONF — not yet bundled)</option>
     </select>
@@ -257,13 +257,13 @@
       <label class="modal-label">Host / IP</label>
       <input id="dm-host" class="modal-input" placeholder="10.0.0.5 or mgmt.example.com">
       <label class="modal-label">Port</label>
-      <input id="dm-port" class="modal-input" type="number" placeholder="Calix 18443 · Arista 443">
+      <input id="dm-port" class="modal-input" type="number" placeholder="Calix E7 22 (SSH) · Arista 443">
       <label class="modal-label">Username</label>
       <input id="dm-user" class="modal-input">
       <label class="modal-label">Password / community</label>
       <input id="dm-secret" class="modal-input" type="password" autocomplete="new-password">
-      <label class="modal-label">API base path (Calix, optional)</label>
-      <input id="dm-base" class="modal-input" placeholder="/rest/v1">
+      <label class="modal-label">API base path (optional)</label>
+      <input id="dm-base" class="modal-input" placeholder="(unused for Calix E7)">
     </div>
     <label class="modal-label">Auto-poll interval (seconds, 0 = manual only)</label>
     <input id="dm-interval" class="modal-input" type="number" min="0" value="0">
