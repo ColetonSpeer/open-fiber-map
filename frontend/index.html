@@ -100,10 +100,13 @@ body.dark-mode .fiber-row.selected-b { background: #163a26; }
 .splice-item.sel { background: #e3f2fd; }
 .splice-item .type-btn { background: none; border: none; cursor: pointer; color: #888; font-size: 13px; padding: 1px 4px; }
 .splice-item .type-btn:hover { color: #1565c0; }
-.splice-type-glyph { font-weight: 700; color: #555; }
+.splice-type-glyph { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #888; padding: 1px 4px; border: 1px solid #ddd; border-radius: 3px; }
+body.dark-mode .splice-type-glyph { color: #9ca3af; border-color: #4b5563; }
 
 /* Splice-tray diagram */
 .sd-typebar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11px; color: #666; border-bottom: 1px solid #eee; }
+.sd-toolrow { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11px; color: #888; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #eee; background: #fafafa; }
+body.dark-mode .sd-toolrow { background: #1b2330; border-top-color: #374151; border-bottom-color: #374151; color: #9ca3af; }
 .sd-typebtn { font-size: 11px; padding: 3px 9px; border: 1px solid #ccc; border-radius: 12px; background: white; cursor: pointer; color: #555; }
 .sd-typebtn.active { background: #1565c0; border-color: #1565c0; color: white; }
 .sd-diagram { position: relative; display: flex; gap: 52px; padding: 6px 6px 2px; }
@@ -156,6 +159,10 @@ body.dark-mode .splice-item.sel { background: #1e3a5f; }
 /* Markers */
 .closure-icon { width: 28px; height: 28px; background: #1565c0; border: 2px solid white; border-radius: 5px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
 .closure-icon span { color: white; font-size: 9px; font-weight: 700; }
+/* Pole ID label under the marker — shown only when zoomed in (#map gets .show-pole-labels) */
+.pole-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: none; font-size: 10px; font-weight: 600; color: #222; white-space: nowrap; pointer-events: none; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
+.show-pole-labels .pole-label { display: block; }
+body.dark-mode .pole-label { color: #e5e7eb; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 3px #000; }
 
 /* Icon buttons */
 .icon-btn { background: none; border: none; cursor: pointer; color: #888; padding: 2px 4px; font-size: 14px; }
@@ -373,7 +380,7 @@ body.dark-mode select, body.dark-mode textarea {
     <span style="opacity: 0.6;">Fiber Network</span>
     <div class="spacer"></div>
     <div id="search-wrap">
-      <input type="text" id="search-input" placeholder="🔍 Search address, pole, closure…"
+      <input type="text" id="search-input" placeholder="🔍 Search address, site, pole, closure, fiber…"
         autocomplete="off"
         oninput="onSearchInput()"
         onkeydown="onSearchKeydown(event)"
@@ -397,7 +404,7 @@ body.dark-mode select, body.dark-mode textarea {
     <button class="tb" onclick="document.getElementById('kml-import-input').click()">📥 Import</button>
     <input type="file" id="kml-import-input" accept=".kml,.kmz" style="display:none" onchange="onImportFileChosen(this)">
     <button class="tb" onclick="exportKMZ()">📤 Export KMZ</button>
-    <span id="active-layer-label" style="display:none;font-size:11px;padding:3px 8px;background:#1565c0;color:white;border-radius:4px;">Layer: —</span>
+    <span id="active-layer-label" style="display:none;margin-left:auto;font-size:11px;padding:3px 8px;background:#1565c0;color:white;border-radius:4px;">Layer: —</span>
     <span id="mode-hint">Click a closure to view splices</span>
   </div>
   <div id="views-panel" style="display:none;position:absolute;top:44px;left:auto;z-index:1000;background:white;border:1px solid #d0d0d0;border-radius:6px;padding:10px 14px;min-width:180px;box-shadow:0 2px 8px rgba(0,0,0,.18);">
@@ -655,6 +662,8 @@ function initMap() {
 
   map.on('click', onMapClick);
   map.on('mousemove', onMapMouseMove);
+  map.on('zoomend', updatePoleLabelVisibility);
+  updatePoleLabelVisibility();
   map.on('moveend', () => {
     const c = map.getCenter();
     layerPrefs.mapLat = c.lat;
@@ -1349,6 +1358,8 @@ function renderSearchResults(q) {
   const lq = q.toLowerCase();
   const poles    = state.poles.filter(p => p.name.toLowerCase().includes(lq)).slice(0, 6);
   const closures = state.closures.filter(c => c.name.toLowerCase().includes(lq)).slice(0, 6);
+  const sites    = (state.sites || []).filter(s => s.name.toLowerCase().includes(lq)).slice(0, 6);
+  const routes   = (state.routes || []).filter(r => r.name.toLowerCase().includes(lq)).slice(0, 6);
   let html = '';
   if (poles.length) {
     html += '<div class="sr-hdr">Poles</div>';
@@ -1360,6 +1371,18 @@ function renderSearchResults(q) {
     html += '<div class="sr-hdr">Closures</div>';
     closures.forEach(c => {
       html += `<div class="sr-item" onclick="pickSearchResult('closure',${c.id})"><span class="sr-badge sr-badge-closure">Closure</span><span class="sr-name">${h(c.name)}</span></div>`;
+    });
+  }
+  if (sites.length) {
+    html += '<div class="sr-hdr">Sites</div>';
+    sites.forEach(s => {
+      html += `<div class="sr-item" onclick="pickSearchResult('site',${s.id})"><span class="sr-badge sr-badge-closure">Site</span><span class="sr-name">${h(s.name)}</span></div>`;
+    });
+  }
+  if (routes.length) {
+    html += '<div class="sr-hdr">Fibers</div>';
+    routes.forEach(r => {
+      html += `<div class="sr-item" onclick="pickSearchResult('route',${r.id})"><span class="sr-badge sr-badge-addr">Fiber</span><span class="sr-name">${h(r.name)}</span></div>`;
     });
   }
   if (_geoResults.length) {
@@ -1487,6 +1510,15 @@ function pickSearchResult(type, idx) {
     const [lng, lat] = c.geom.coordinates;
     map.setView([lat, lng], 18);
     openClosurePanel(idx);
+  } else if (type === 'site') {
+    if ((state.sites || []).some(x => x.id === idx)) window.location.href = '/site/' + idx;
+  } else if (type === 'route') {
+    const r = (state.routes || []).find(x => x.id === idx);
+    if (!r || !r.geom) return;
+    const latlngs = r.geom.coordinates.map(c => [c[1], c[0]]);
+    if (latlngs.length >= 2) map.fitBounds(latlngs, { maxZoom: 18 });
+    else if (latlngs.length === 1) map.setView(latlngs[0], 18);
+    openViewModal('route', r.id, r);
   } else if (type === 'addr') {
     if (!geoResult) return;
     if (geoResult.boundingbox) {
@@ -2334,6 +2366,7 @@ const _traceRouteIds = new Set(
     .split(',').map(Number).filter(Boolean)
 );
 let _traceHalos = [];
+let _routeHits = [];   // transparent wide click/hover targets over thin route lines
 let _traceZoomed = false;
 
 function zoomToTrace() {
@@ -2345,6 +2378,13 @@ function zoomToTrace() {
   _traceZoomed = true;
 }
 
+// Pole ID labels are only shown when zoomed in, to avoid clutter at wide zoom.
+const POLE_LABEL_ZOOM = 16;
+function updatePoleLabelVisibility() {
+  const el = document.getElementById('map');
+  if (el && map) el.classList.toggle('show-pole-labels', map.getZoom() >= POLE_LABEL_ZOOM);
+}
+
 function renderMap() {
   if (state.mode === 'edit' && state.editingRouteId !== null) return; // don't reset while vertex-editing
   // Clear existing markers
@@ -2354,6 +2394,8 @@ function renderMap() {
   Object.values(state.routeLayers).forEach(m => map.removeLayer(m));
   _traceHalos.forEach(m => map.removeLayer(m));
   _traceHalos = [];
+  _routeHits.forEach(m => map.removeLayer(m));
+  _routeHits = [];
   state.closureMarkers = {};
   state.poleMarkers = {};
   state.siteMarkers = {};
@@ -2363,7 +2405,11 @@ function renderMap() {
   state.closures.forEach(c => {
     if (!isItemVisible(c)) return;
     const [lng, lat] = c.geom.coordinates;
-    const fiberCount = (c.cables || []).reduce((s, ca) => s + ca.fiber_count, 0) || '?';
+    // Cable counts are only loaded once a closure's panel is opened; show the
+    // fiber total when known, otherwise leave the marker blank (never "?").
+    const fiberCount = (c.cables && c.cables.length)
+      ? c.cables.reduce((s, ca) => s + (ca.fiber_count || 0), 0)
+      : '';
     const icon = L.divIcon({
       className: '',
       html: `<div class="closure-icon"><span>${fiberCount}</span></div>`,
@@ -2431,9 +2477,10 @@ function renderMap() {
     const poleFill = isPlan ? '#7E57C2' : '#5D4037';
     const icon = L.divIcon({
       className: '',
-      html: `<div style="position:relative;width:10px;height:10px;opacity:${dimmed ? 0.3 : 1};">
-        <div style="width:10px;height:10px;background:${poleFill};border:2px solid ${hasClosure ? '#1565c0' : 'white'};border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3);"></div>
+      html: `<div style="position:relative;width:10px;height:10px;">
+        <div style="width:10px;height:10px;background:${poleFill};border:2px solid ${hasClosure ? '#1565c0' : 'white'};border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3);opacity:${dimmed ? 0.3 : 1};"></div>
         ${countBadge}
+        <div class="pole-label">${h(p.name)}</div>
       </div>`,
       iconSize: [10, 10], iconAnchor: [5, 5]
     });
@@ -2541,15 +2588,26 @@ function renderMap() {
     if (isPlan) style.dashArray = '8,6';
     const line = L.polyline(coords, style).addTo(map);
     const fcLabel = r.fiber_count ? ` (${r.fiber_count}F)` : '';
-    line.bindTooltip((isPlan ? 'PLAN: ' : '') + r.name + fcLabel, { permanent: false, direction: 'top', sticky: true });
-    if (!dimmed) line.on('click', (e) => {
-      L.DomEvent.stopPropagation(e);
-      if (state.mode === 'select') {
-        openViewModal('route', r.id, state.routes.find(x => x.id === r.id));
-      } else if (state.mode === 'edit') {
-        if (state.editingRouteId === r.id) { clearEditHandles(); } else { startEditRoute(r.id); }
-      }
-    });
+    const tip = (isPlan ? 'PLAN: ' : '') + r.name + fcLabel;
+    // Transparent wide line so the thin route is easy to click/hover.
+    const hit = L.polyline(coords, { color: '#000', opacity: 0, weight: 16, interactive: !dimmed }).addTo(map);
+    _routeHits.push(hit);
+    hit.bindTooltip(tip, { permanent: false, direction: 'top', sticky: true });
+    if (!dimmed) {
+      const onRouteClick = (e) => {
+        // Only consume the click in select/edit; in placement modes let it fall
+        // through to the map so closures/poles can be dropped on top of a route.
+        if (state.mode === 'select') {
+          L.DomEvent.stopPropagation(e);
+          openViewModal('route', r.id, state.routes.find(x => x.id === r.id));
+        } else if (state.mode === 'edit') {
+          L.DomEvent.stopPropagation(e);
+          if (state.editingRouteId === r.id) { clearEditHandles(); } else { startEditRoute(r.id); }
+        }
+      };
+      line.on('click', onRouteClick);
+      hit.on('click', onRouteClick);
+    }
     state.routeLayers[r.id] = line;
   });
 
@@ -2960,6 +3018,14 @@ async function openViewModal(entityType, entityId, obj) {
     </span></div>`;
   }
 
+  if (entityType === 'pole') {
+    const cls = state.closures.filter(c => c.pole_id === entityId);
+    const list = cls.length
+      ? cls.map(c => `<button class="pole-closure-open" data-id="${c.id}" style="display:block;width:100%;text-align:left;margin:2px 0;padding:6px 10px;border:1px solid #e0e0e0;border-radius:5px;background:white;cursor:pointer;font-size:12px;">📦 ${h(c.name)} — open splice panel →</button>`).join('')
+      : '<em style="color:#999">— none</em>';
+    rows += `<div class="view-row"><span class="view-label">Closures</span><span>${list}</span></div>`;
+  }
+
   const bg = document.createElement('div');
   bg.className = 'modal-bg';
   const label = entityType === 'route' ? 'Fiber' : entityType.charAt(0).toUpperCase() + entityType.slice(1);
@@ -2984,6 +3050,9 @@ async function openViewModal(entityType, entityId, obj) {
   bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
   document.getElementById('view-close-btn').onclick = () => bg.remove();
   document.getElementById('view-edit-btn').onclick = () => { bg.remove(); openEditModal(entityType, entityId, obj); };
+  bg.querySelectorAll('.pole-closure-open').forEach(btn => {
+    btn.onclick = () => { bg.remove(); openClosurePanel(parseInt(btn.dataset.id)); };
+  });
   if (canPromote) {
     document.getElementById('view-promote-btn').onclick = async () => {
       let body;
@@ -3024,35 +3093,10 @@ async function openViewModal(entityType, entityId, obj) {
 }
 
 function handlePoleClick(poleId) {
+  // Open the pole's detail card directly; it lists attached closures with
+  // buttons that jump to the splice panel (no intermediate picker popup).
   const pole = state.poles.find(p => p.id === poleId);
-  const closures = state.closures.filter(c => c.pole_id === poleId);
-
-  if (closures.length === 0) { openViewModal('pole', poleId, pole); return; }
-
-  const bg = document.createElement('div');
-  bg.className = 'modal-bg';
-  bg.innerHTML = `<div class="modal" style="min-width:320px;">
-    <h2 style="margin:0 0 14px;">${h(pole.name)}</h2>
-    <div style="display:grid;gap:6px;margin-bottom:16px;">
-      ${closures.map(c => `
-        <button class="closure-pick-btn" data-id="${c.id}"
-          style="padding:10px 14px;text-align:left;border:1px solid #e0e0e0;border-radius:6px;background:white;cursor:pointer;font-size:13px;">
-          <strong>${h(c.name)}</strong>
-          ${c.notes ? `<div style="font-size:11px;color:#888;margin-top:2px;">${h(c.notes)}</div>` : ''}
-        </button>`).join('')}
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <button id="pole-info-btn" style="font-size:12px;color:#555;background:none;border:none;cursor:pointer;">Pole info</button>
-      <button id="pick-cancel-btn" style="padding:8px 16px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;">Cancel</button>
-    </div>
-  </div>`;
-  document.body.appendChild(bg);
-  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
-  bg.querySelectorAll('.closure-pick-btn').forEach(btn => {
-    btn.addEventListener('click', () => { bg.remove(); openClosurePanel(parseInt(btn.dataset.id)); });
-  });
-  bg.querySelector('#pole-info-btn').onclick = () => { bg.remove(); openViewModal('pole', poleId, pole); };
-  bg.querySelector('#pick-cancel-btn').onclick = () => bg.remove();
+  openViewModal('pole', poleId, pole);
 }
 
 function buildOnCreateHtml(entityType) {
@@ -3502,8 +3546,8 @@ function renderPanel() {
       </div>
       <div style="display:flex;align-items:center;gap:4px;">
         ${c.pole_id ? `<button class="icon-btn" title="View pole" style="font-size:15px;" onclick="openViewModal('pole',${c.pole_id},state.poles.find(p=>p.id===${c.pole_id}))">📍</button>` : ''}
-        <button class="icon-btn" style="font-size:16px;" onclick="openEditModal('closure',${c.id},state.closures.find(x=>x.id===${c.id}))">✏️</button>
-        <button class="close-btn" onclick="closePanel()">×</button>
+        <button class="icon-btn" title="Edit closure" style="font-size:16px;" onclick="openEditModal('closure',${c.id},state.closures.find(x=>x.id===${c.id}))">✏️</button>
+        <button class="close-btn" title="Close panel" onclick="closePanel()">×</button>
       </div>
     </div>
   `;
@@ -3570,14 +3614,16 @@ function renderPanel() {
   }
 
   html += `<div class="sd-typebar">Splice type:
-    <button class="sd-typebtn ${state.spliceType === 'fusion' ? 'active' : ''}" onclick="setNewSpliceType('fusion')">◆ Fusion</button>
-    <button class="sd-typebtn ${state.spliceType === 'pass-through' ? 'active' : ''}" onclick="setNewSpliceType('pass-through')">┄ Glass-through</button>
+    <button class="sd-typebtn ${state.spliceType === 'fusion' ? 'active' : ''}" onclick="setNewSpliceType('fusion')">Fusion</button>
+    <button class="sd-typebtn ${state.spliceType === 'pass-through' ? 'active' : ''}" onclick="setNewSpliceType('pass-through')">Glass-through</button>
   </div>`;
   html += `<div class="sd-typebar">Show:
     <button class="sd-typebtn ${state.fiberFilter === 'all' ? 'active' : ''}" onclick="setFiberFilter('all')">All fibers</button>
     <button class="sd-typebtn ${state.fiberFilter === 'connected' ? 'active' : ''}" onclick="setFiberFilter('connected')">Connected</button>
     <button class="sd-typebtn ${state.fiberFilter === 'splitter' ? 'active' : ''}" onclick="setFiberFilter('splitter')">Splitters only</button>
-    <button class="sd-typebtn sd-delbtn ${state.spliceDeleteMode ? 'active' : ''}" style="margin-left:auto;" onclick="toggleSpliceDeleteMode()" title="Click fibers to break their splices">✂ Delete</button>
+  </div>`;
+  html += `<div class="sd-toolrow">Tools:
+    <button class="sd-typebtn sd-delbtn ${state.spliceDeleteMode ? 'active' : ''}" onclick="toggleSpliceDeleteMode()" title="Click fibers (or splitter ports) to break their connections">✂ Break splices</button>
   </div>`;
   html += renderSpliceDiagram(c, sel, connSet, connectedSet, splitterFiberSet);
 
@@ -3674,8 +3720,8 @@ function renderPanel() {
       const tFc = FIBER_COLORS[s.to_fiber % 12];
       const isPass = s.splice_type === 'pass-through';
       const glyph = isPass
-        ? `<span class="splice-type-glyph" title="Glass-through (uncut)">┄</span>`
-        : `<span class="splice-type-glyph" title="Fusion splice">◆</span>`;
+        ? `<span class="splice-type-glyph" title="Glass-through (uncut)">glass</span>`
+        : `<span class="splice-type-glyph" title="Fusion splice">fusion</span>`;
       html += `<div class="splice-item ${s.id === state.selectedSplice ? 'sel' : ''}">
         <span class="fiber-dot" style="background:${fFc.bg};border:1.5px solid ${fFc.border};width:10px;height:10px;"></span>
         <span>${h(fC?.name || '?')} F${s.from_fiber + 1}</span>
@@ -3692,7 +3738,7 @@ function renderPanel() {
       html += `<div class="splice-item">
         <span class="fiber-dot" style="background:${fc.bg};border:1.5px solid ${fc.border};width:10px;height:10px;"></span>
         <span>${h(cab?.name || '?')} F${link.fiber + 1}</span>
-        <span class="splice-type-glyph" title="Fusion splice to splitter">◆</span>
+        <span class="splice-type-glyph" title="Fusion splice to splitter">fusion</span>
         <span>🌳 ${h(link.sp.name)} · ${h(link.label)}</span>
         <button class="del-btn" onclick="unbindSplitterLink(${link.sp.id},'${link.key}')" title="Remove" style="margin-left:auto;">🗑</button>
       </div>`;

@@ -35,7 +35,7 @@
   .site-tab.active { border-bottom-color: #1565c0; color: #1565c0; font-weight: 600; }
 
   /* Content area */
-  #tab-content { padding: 28px 28px; max-width: 900px; }
+  #tab-content { padding: 28px 28px; max-width: 1180px; margin: 0 auto; }
 
   /* Cards */
   .card {
@@ -1553,7 +1553,7 @@ function monitorControl(eq) {
   const dev = monitoredDevices.find(d => d.equipment_id === eq.id);
   if (!dev) {
     return `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;"
-      onclick="openDeviceModal(${eq.id})" title="Set up optical monitoring">📡 Monitor</button>`;
+      onclick="openDeviceModal(${eq.id})" title="Set up optical light-level monitoring (polls the device over SSH/SNMP for Rx/Tx power)">📡 Monitor</button>`;
   }
   const dot = dev.last_status === 'ok' ? '#2e7d32' : (dev.last_status === 'error' ? '#c62828' : '#aaa');
   const when = dev.last_polled_at ? new Date(dev.last_polled_at).toLocaleTimeString() : 'never';
