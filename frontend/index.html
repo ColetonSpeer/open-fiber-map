@@ -351,6 +351,61 @@ body.dark-mode input:not([type=checkbox]):not([type=radio]):not([type=color]):no
 body.dark-mode select, body.dark-mode textarea {
   background-color: #111827 !important; border-color: #4b5563 !important; color: #f3f4f6 !important;
 }
+
+/* ── Route name labels ───────────────────────────────────────────────────────── */
+.route-label { display:none;font-size:9px;font-weight:700;color:#ff8800;white-space:nowrap;pointer-events:none;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000;background:none;border:none;padding:0;line-height:1; }
+.show-route-labels .route-label { display:block; }
+/* ── Flash pulse ─────────────────────────────────────────────────────────────── */
+@keyframes flash-pulse { 0%{stroke-opacity:.9;fill-opacity:.5} 50%{stroke-opacity:.2;fill-opacity:.1} 100%{stroke-opacity:.9;fill-opacity:.5} }
+/* ── Recently viewed in search ───────────────────────────────────────────────── */
+.sr-recent-item { padding:7px 12px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f0f0f0;color:#555; }
+.sr-recent-item:hover { background:#f5f5f5; }
+body.dark-mode .sr-recent-item { color:#9ca3af;border-bottom-color:#374151; }
+body.dark-mode .sr-recent-item:hover { background:#1e3a5f; }
+.sr-highlighted { background:#1565c0 !important; color:white !important; }
+.sr-highlighted .sr-badge { opacity:.85; }
+/* ── Toast notifications ────────────────────────────────────────────────────── */
+#toast-container { position:fixed;top:70px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none; }
+.toast { background:rgba(15,22,36,.93);color:#f9fafb;padding:9px 15px;border-radius:7px;font-size:13px;box-shadow:0 3px 12px rgba(0,0,0,.4);border-left:3px solid #3b82f6;animation:toast-in .2s ease;pointer-events:auto;max-width:280px; }
+.toast.toast-ok   { border-left-color:#22c55e; }
+.toast.toast-warn { border-left-color:#f59e0b; }
+.toast.toast-err  { border-left-color:#ef4444; }
+@keyframes toast-in { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:none} }
+/* ── Locate me button ────────────────────────────────────────────────────────── */
+.leaflet-control-locate a { font-size:16px;line-height:30px; }
+/* ── Draw distance label ────────────────────────────────────────────────────── */
+.draw-dist-label { background:rgba(15,22,36,.88);color:#fbbf24;border:none;border-radius:5px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.4); }
+.draw-dist-label::before { display:none; }
+/* ── Network stats panel ─────────────────────────────────────────────────── */
+#net-stats { display:none;position:fixed;bottom:52px;right:10px;z-index:1100;background:rgba(20,27,40,.88);color:#e5e7eb;border-radius:8px;padding:10px 14px;font-size:12px;min-width:180px;box-shadow:0 2px 8px rgba(0,0,0,.4);backdrop-filter:blur(4px); }
+#net-stats h4 { margin:0 0 8px;font-size:12px;font-weight:700;color:#93c5fd;letter-spacing:.4px; }
+#net-stats .ns-row { display:flex;justify-content:space-between;gap:20px;margin:3px 0; }
+#net-stats .ns-val { font-weight:600;color:#f9fafb; }
+#net-stats-toggle { position:fixed;bottom:52px;right:10px;z-index:1101;background:rgba(20,27,40,.88);color:#93c5fd;border:none;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.4);backdrop-filter:blur(4px);display:none; }
+/* ── Measure tool ─────────────────────────────────────────────────────────── */
+.measure-tooltip { background:rgba(15,22,36,.92);color:#f9fafb;border:none;border-radius:5px;padding:4px 8px;font-size:12px;font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.4); }
+.measure-tooltip::before { display:none; }
+/* ── Context menu ────────────────────────────────────────────────────────── */
+#map-ctx-menu { display:none;position:absolute;z-index:2000;background:rgba(15,22,36,.95);border-radius:8px;padding:5px 0;min-width:180px;box-shadow:0 4px 20px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px); }
+.ctx-item { display:flex;align-items:center;gap:9px;color:#e5e7eb;font-size:13px;padding:8px 15px;cursor:pointer;user-select:none; }
+.ctx-item:hover { background:rgba(255,255,255,.1);color:#fff; }
+.ctx-item.ctx-danger { color:#fca5a5; }
+.ctx-item.ctx-danger:hover { background:rgba(239,68,68,.2);color:#fca5a5; }
+.ctx-item .ctx-ic { font-size:13px;width:15px;text-align:center;flex-shrink:0;opacity:.8; }
+.ctx-divider { border-top:1px solid rgba(255,255,255,.1);margin:4px 0; }
+
+/* ── Dark mode fixes ─────────────────────────────────────────────────────── */
+body.dark-mode .view-label { color: #9ca3af; }
+body.dark-mode .panel-meta-label { color: #d1d5db; }
+body.dark-mode .close-btn:hover { color: #f3f4f6; }
+body.dark-mode .icon-btn:hover { color: #e5e7eb; }
+body.dark-mode .sd-typebar { color: #9ca3af; border-bottom-color: #374151; }
+body.dark-mode .sd-side-btn { border-color: #4b5563; color: #9ca3af; }
+body.dark-mode .sd-side-btn:hover { color: #93c5fd; border-color: #3b82f6; }
+body.dark-mode .dir-IN  { background: #13314f; color: #93c5fd; }
+body.dark-mode .dir-OUT { background: #163a26; color: #86efac; }
+body.dark-mode .form-card .btn-row button { background: #374151; border-color: #4b5563; color: #d1d5db; }
+body.dark-mode .sel-bar button { color: #93c5fd; }
 </style>
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -383,6 +438,7 @@ body.dark-mode select, body.dark-mode textarea {
       <input type="text" id="search-input" placeholder="🔍 Search address, site, pole, closure, fiber…"
         autocomplete="off"
         oninput="onSearchInput()"
+        onfocus="if(!this.value.trim())renderRecentlyViewed()"
         onkeydown="onSearchKeydown(event)"
         onfocus="if(this.value.trim().length>=2)renderSearchResults()">
       <div id="search-results"></div>
@@ -392,19 +448,23 @@ body.dark-mode select, body.dark-mode textarea {
     <button onclick="logout()">Sign Out</button>
   </div>
   <div id="toolbar">
-    <button class="tb active" id="btn-select" onclick="setMode('select')">Select</button>
-    <button class="tb" id="btn-closure" onclick="setMode('closure')">+ Closure</button>
-    <button class="tb" id="btn-route" onclick="setMode('route')">+ Fiber</button>
-    <button class="tb" id="btn-pole" onclick="setMode('pole')">+ Pole</button>
+    <button class="tb active" id="btn-select" onclick="setMode('select')" title="Select (S)">Select</button>
+    <button class="tb" id="btn-closure" onclick="setMode('closure')" title="Add Closure (C)">+ Closure</button>
+    <button class="tb" id="btn-route" onclick="setMode('route')" title="Draw Fiber (F)">+ Fiber</button>
+    <button class="tb" id="btn-pole" onclick="setMode('pole')" title="Add Pole (P)">+ Pole</button>
     <button class="tb" id="btn-ped" onclick="setMode('ped')">+ Ped</button>
     <button class="tb" id="btn-site" onclick="pickSiteType()">+ Site</button>
     <button class="tb" id="btn-delete" onclick="setMode('delete')" style="color:#c62828;">Delete Area</button>
-    <button class="tb" id="btn-edit" onclick="setMode('edit')" style="color:#1565c0;">✏ Edit</button>
+    <button class="tb" id="btn-edit" onclick="setMode('edit')" style="color:#1565c0;" title="Edit mode (E)">✏ Edit</button>
+    <button class="tb" id="btn-measure" onclick="setMode('measure')" style="color:#00897b;" title="Measure distance (M)">📏 Measure</button>
     <button class="tb" id="btn-plan" onclick="togglePlanMode()" style="color:#7E57C2;">🧭 Planning</button>
     <button class="tb" id="btn-views" onclick="toggleViewsPanel()">🗂 Views</button>
     <button class="tb" onclick="document.getElementById('kml-import-input').click()">📥 Import</button>
     <input type="file" id="kml-import-input" accept=".kml,.kmz" style="display:none" onchange="onImportFileChosen(this)">
     <button class="tb" onclick="exportKMZ()">📤 Export KMZ</button>
+    <button class="tb" onclick="exportCSV()" title="Download poles, closures and routes as CSV">📋 Export CSV</button>
+    <button class="tb" onclick="runHealthCheck()" title="Scan the network for documentation issues">🏥 Health Check</button>
+    <button class="tb" onclick="exportNetworkJSON()" title="Download full network data as JSON (backup / mobile offline)">💾 Export JSON</button>
     <span id="active-layer-label" style="display:none;margin-left:auto;font-size:11px;padding:3px 8px;background:#1565c0;color:white;border-radius:4px;">Layer: —</span>
     <span id="mode-hint">Click a closure to view splices</span>
   </div>
@@ -424,6 +484,15 @@ body.dark-mode select, body.dark-mode textarea {
       </label>
     </div>
     <div style="border-top:1px solid #e0e0e0;margin-top:8px;padding-top:8px;">
+      <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Map labels</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;cursor:pointer;">
+        <input type="checkbox" id="lp-pole-labels" onchange="setOverlay('poleLabels',this.checked)" checked> Pole IDs (zoom 16+)
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="lp-route-labels" onchange="setOverlay('routeLabels',this.checked)" checked> Route names (zoom 15+)
+      </label>
+    </div>
+    <div style="border-top:1px solid #e0e0e0;margin-top:8px;padding-top:8px;">
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
         <input type="checkbox" id="lp-dark" onchange="setDarkMode(this.checked)"> Dark mode
       </label>
@@ -440,7 +509,41 @@ body.dark-mode select, body.dark-mode textarea {
     </div>
   </div>
   <div id="main">
-    <div id="map"></div>
+    <div id="map">
+<style>
+#map-legend{position:absolute;bottom:28px;left:10px;z-index:900;background:rgba(20,27,40,.88);color:#e5e7eb;border-radius:8px;padding:10px 13px;font-size:12px;min-width:130px;box-shadow:0 2px 8px rgba(0,0,0,.4);backdrop-filter:blur(4px);user-select:none;}
+#map-legend h4{margin:0 0 8px;font-size:12px;font-weight:700;color:#93c5fd;letter-spacing:.4px;}#map-legend .leg-row{display:flex;align-items:center;gap:7px;margin:4px 0;}#map-legend .leg-icon{width:20px;height:20px;border-radius:4px;border:2px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}#map-legend .leg-line{width:20px;height:3px;border-radius:2px;flex-shrink:0;}#legend-toggle{position:absolute;bottom:28px;left:10px;z-index:901;background:rgba(20,27,40,.88);color:#93c5fd;border:none;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.4);backdrop-filter:blur(4px);display:none;}
+</style>
+<button id="legend-toggle" onclick="document.getElementById('map-legend').style.display='block';this.style.display='none';" title="Show legend">⬡ Legend</button>
+<div id="map-legend">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <h4 style="margin:0;">Legend</h4>
+    <button onclick="this.closest('#map-legend').style.display='none';document.getElementById('legend-toggle').style.display='block';" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:14px;padding:0;">×</button>
+  </div>
+  <div class="leg-row" style="margin-bottom:4px;font-size:10px;opacity:.7;font-weight:600;letter-spacing:.3px;">STATUS DOTS</div>
+  <div class="leg-row"><div class="leg-icon" style="background:#1565c0;font-size:8px;position:relative;"><div style="position:absolute;top:-3px;right:-3px;width:6px;height:6px;border-radius:50%;background:#22c55e;border:1px solid white;"></div></div><span>Active</span></div>
+  <div class="leg-row"><div class="leg-icon" style="background:#1565c0;font-size:8px;position:relative;"><div style="position:absolute;top:-3px;right:-3px;width:6px;height:6px;border-radius:50%;background:#f59e0b;border:1px solid white;"></div></div><span>Under Construction</span></div>
+  <div class="leg-row" style="margin-bottom:6px;"><div class="leg-icon" style="background:#1565c0;font-size:8px;position:relative;"><div style="position:absolute;top:-3px;right:-3px;width:6px;height:6px;border-radius:50%;background:#9e9e9e;border:1px solid white;"></div></div><span>Decommissioned</span></div>
+  <div class="leg-row"><div class="leg-icon" style="background:#1565c0;">+</div><span>Pole</span></div>
+  <div class="leg-row"><div class="leg-icon" style="background:#1565c0;font-size:8px;">■</div><span>Closure</span></div>
+  <div class="leg-row"><div class="leg-icon" style="background:#1565c0;">🏢</div><span>Site (Office)</span></div>
+  <div class="leg-row"><div class="leg-icon" style="background:#4e342e;">🏠</div><span>Site (Hut)</span></div>
+  <div class="leg-row"><div class="leg-icon" style="background:#546e7a;">📦</div><span>Site (Cabinet)</span></div>
+  <div class="leg-row"><div class="leg-line" style="background:#FF8800;"></div><span>Fiber (aerial)</span></div>
+  <div class="leg-row"><div class="leg-line" style="background:#FF8800;" title="dashed">╌╌╌</div><span>Fiber (buried)</span></div>
+  <div class="leg-row"><div class="leg-line" style="background:#7E57C2;"></div><span>Fiber (planned)</span></div>
+</div>
+<div id="map-ctx-menu"></div>
+<div id="toast-container"></div>
+<button id="net-stats-toggle" onclick="document.getElementById('net-stats').style.display='block';this.style.display='none';" title="Show network stats">≡ Stats</button>
+<div id="net-stats">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <h4 style="margin:0;">Network Stats</h4>
+    <button onclick="document.getElementById('net-stats').style.display='none';document.getElementById('net-stats-toggle').style.display='block';" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:14px;padding:0;">×</button>
+  </div>
+  <div id="ns-body"><div style="color:#6b7280;font-size:11px;">Loading…</div></div>
+</div>
+    </div>
     <div id="side-panel"></div>
   </div>
 </div>
@@ -661,6 +764,31 @@ function initMap() {
     { attribution: 'Roads &copy; Esri', maxNativeZoom: 19, maxZoom: 22, pane: 'roadsPane' }
   );
 
+  // Locate me control
+  const LocateControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function() {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+      div.innerHTML = '<a href="#" title="Locate me (use device GPS)" style="font-size:17px;line-height:30px;display:block;text-decoration:none;text-align:center;width:30px;height:30px;" onclick="event.preventDefault();locateMe()">◎</a>';
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    }
+  });
+  new LocateControl().addTo(map);
+
+  // Fit all elements control
+  const FitAllControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function() {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+      div.innerHTML = '<a href="#" title="Fit all network elements in view (H)" style="font-size:14px;line-height:30px;display:block;text-decoration:none;text-align:center;width:30px;height:30px;" onclick="event.preventDefault();fitAllElements()">⊞</a>';
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    }
+  });
+  new FitAllControl().addTo(map);
+  L.control.scale({ imperial: true, metric: true, position: 'bottomleft' }).addTo(map);
+
   map.on('click', onMapClick);
   map.on('mousemove', onMapMouseMove);
   map.on('zoomend', updatePoleLabelVisibility);
@@ -677,7 +805,27 @@ function initMap() {
   scheduleGeoContext();
   map.on('contextmenu', (e) => {
     L.DomEvent.preventDefault(e.originalEvent);
-    if (state.mode !== 'select') setMode('select');
+    if (state.mode !== 'select') { setMode('select'); return; }
+    const pt = map.latLngToContainerPoint(e.latlng);
+    showCtxMenu(e.latlng, pt);
+  });
+
+  // Global Escape: cancel mode / close modals / close context menu
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    const ctx = document.getElementById('map-ctx-menu');
+    if (ctx && ctx.style.display !== 'none') { hideCtxMenu(); return; }
+    if (_cableTraceHalos.length) { clearCableTrace(); return; }
+    if (_focusRouteId) { clearRouteFocus(); return; }
+    const modal = document.querySelector('.modal-bg');
+    if (modal) { modal.remove(); return; }
+    if (state && state.mode !== 'select') setMode('select');
+  });
+
+  // Dismiss context menu on outside click
+  document.addEventListener('click', (ev) => {
+    const ctx = document.getElementById('map-ctx-menu');
+    if (ctx && ctx.style.display !== 'none' && !ctx.contains(ev.target)) hideCtxMenu();
   });
 
   map.on('mousedown', (e) => {
@@ -711,7 +859,7 @@ let _geoContext  = null;   // { vb: 'west,north,east,south', cc: 'us' } — curr
 let _geoCtxTimer = null;
 let _pendingImport = null;  // holds { parsed, groupName, photoFieldId } while import modal is open
 let _importZip = null;      // JSZip instance kept alive for photo extraction during import
-let layerPrefs = { basemap: 'street', showLabels: true, showRoads: true, showHouseNums: false, mapLat: 39.5, mapLng: -98.35, mapZoom: 4, darkMode: false };
+let layerPrefs = { basemap: 'street', showLabels: true, showRoads: true, showHouseNums: false, showPoleLabels: true, showRouteLabels: true, mapLat: 39.5, mapLng: -98.35, mapZoom: 4, darkMode: false };
 
 function applyLayerPrefs() {
   if (layerPrefs.basemap === 'sat') {
@@ -739,6 +887,11 @@ function applyLayerPrefs() {
   if (hnEl)  hnEl.checked  = layerPrefs.showHouseNums;
   const ovEl = document.getElementById('lp-overlays');
   if (ovEl) ovEl.style.display = layerPrefs.basemap === 'sat' ? '' : 'none';
+  const plEl = document.getElementById('lp-pole-labels');
+  const rlEl = document.getElementById('lp-route-labels');
+  if (plEl) plEl.checked = layerPrefs.showPoleLabels !== false;
+  if (rlEl) rlEl.checked = layerPrefs.showRouteLabels !== false;
+  updatePoleLabelVisibility();
 }
 
 function setBasemap(mode) {
@@ -748,9 +901,11 @@ function setBasemap(mode) {
 }
 
 function setOverlay(key, val) {
-  if (key === 'labels')    layerPrefs.showLabels    = val;
-  if (key === 'roads')     layerPrefs.showRoads     = val;
-  if (key === 'houseNums') layerPrefs.showHouseNums = val;
+  if (key === 'labels')      layerPrefs.showLabels      = val;
+  if (key === 'roads')       layerPrefs.showRoads       = val;
+  if (key === 'houseNums')   layerPrefs.showHouseNums   = val;
+  if (key === 'poleLabels')  { layerPrefs.showPoleLabels  = val; updatePoleLabelVisibility(); saveLayerPrefs(); return; }
+  if (key === 'routeLabels') { layerPrefs.showRouteLabels = val; updatePoleLabelVisibility(); saveLayerPrefs(); return; }
   applyLayerPrefs();
   saveLayerPrefs();
 }
@@ -831,6 +986,7 @@ let lastClickTime = 0;
 let lastClickLatLng = null;
 
 function onMapClick(e) {
+  if (state.mode === 'measure') { measureClick(e.latlng); return; }
   if (state.mode === 'edit') { clearEditHandles(); return; }
   if (state.mode === 'select' && state.selectedClosure) closePanel();
   if (state.mode === 'delete') return;
@@ -850,7 +1006,14 @@ function onMapClick(e) {
   } else if (state.mode === 'pole') {
     promptCreatePole(e.latlng);
   } else if (state.mode === 'ped') {
-    promptCreatePed(e.latlng);
+    let pedLatlng = e.latlng;
+    let pedSnappedRouteId = null;
+    if (state.snapRouteId) {
+      pedLatlng = L.latLng(state.snapRoutePoint.lat, state.snapRoutePoint.lng);
+      pedSnappedRouteId = state.snapRouteId;
+    }
+    clearSnap();
+    promptCreatePed(pedLatlng, pedSnappedRouteId);
   } else if (state.mode === 'site') {
     promptCreateSite(e.latlng, state.pendingSiteType);
   } else if (state.mode === 'route') {
@@ -904,7 +1067,7 @@ function onMapClick(e) {
       }
       return;
     }
-    // Normal click - snap to closure (first point only), pole, or site, then add point
+    // Normal click - snap to closure (first point) or ped pole (intermediate), pole, or site, then add point
     lastClickTime = now;
     let clickLatLng = e.latlng;
     let closureSnappedId = null;
@@ -920,6 +1083,17 @@ function onMapClick(e) {
         // closure on a pole → implicitly attach that pole too
         if (cl.pole_id && !state.drawAttachedPoles.includes(cl.pole_id)) {
           state.drawAttachedPoles.push(cl.pole_id);
+        }
+      }
+    } else if (state.snapClosureId && !isFirstPoint) {
+      // Ped/pole-mounted closure at an intermediate waypoint: snap to the pole and attach it
+      const cl = state.closures.find(c => c.id === state.snapClosureId);
+      if (cl && cl.pole_id) {
+        const pole = state.poles.find(p => p.id === cl.pole_id);
+        if (pole) {
+          const [lng, lat] = pole.geom.coordinates;
+          clickLatLng = L.latLng(lat, lng);
+          if (!state.drawAttachedPoles.includes(pole.id)) state.drawAttachedPoles.push(pole.id);
         }
       }
     } else if (state.snapPoleId) {
@@ -1168,6 +1342,7 @@ function updatePreview(e) {
   } else {
     state.previewLine = L.polyline(coords, { color: '#FF8800', weight: 2.5, opacity: 0.55, dashArray: '7,5' }).addTo(map);
   }
+  updateDrawDistLabel(targetLatLng);
 }
 
 function onMapMouseMove(e) {
@@ -1343,7 +1518,9 @@ function showLayerBlockMessage(type, layerName) {
 
 // ============ SEARCH ============
 function onSearchInput() {
+  _searchHlIdx = -1;
   const q = document.getElementById('search-input').value.trim();
+  if (!q && _recentlyViewed.length) { renderRecentlyViewed(); return; }
   if (_searchTimer) clearTimeout(_searchTimer);
   if (_searchAbort) { _searchAbort.abort(); _searchAbort = null; }
   if (q.length < 2) { _geoResults = []; hideSearchResults(); return; }
@@ -1351,8 +1528,23 @@ function onSearchInput() {
   _searchTimer = setTimeout(() => fetchGeoSearch(q), 200);
 }
 
+let _searchHlIdx = -1;
 function onSearchKeydown(e) {
-  if (e.key === 'Escape') { hideSearchResults(); e.target.value = ''; e.target.blur(); }
+  if (e.key === 'Escape') { hideSearchResults(); e.target.value = ''; e.target.blur(); _searchHlIdx = -1; return; }
+  const items = [...document.querySelectorAll('#search-results .sr-item, #search-results .sr-recent-item')];
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _searchHlIdx = Math.min(_searchHlIdx + 1, items.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _searchHlIdx = Math.max(_searchHlIdx - 1, 0);
+  } else if (e.key === 'Enter') {
+    const hl = document.querySelector('#search-results .sr-highlighted');
+    if (hl) { e.preventDefault(); hl.click(); _searchHlIdx = -1; return; }
+  } else { return; }
+  items.forEach((el, i) => el.classList.toggle('sr-highlighted', i === _searchHlIdx));
+  items[_searchHlIdx]?.scrollIntoView({ block: 'nearest' });
 }
 
 function renderSearchResults(q) {
@@ -1506,12 +1698,14 @@ function pickSearchResult(type, idx) {
     if (!p) return;
     const [lng, lat] = p.geom.coordinates;
     map.setView([lat, lng], 18);
+    flashMapElement('pole', idx); addRecentlyViewed('pole', idx, p.name);
     handlePoleClick(idx);
   } else if (type === 'closure') {
     const c = state.closures.find(x => x.id === idx);
     if (!c) return;
     const [lng, lat] = c.geom.coordinates;
     map.setView([lat, lng], 18);
+    flashMapElement('closure', idx); addRecentlyViewed('closure', idx, c.name);
     openClosurePanel(idx);
   } else if (type === 'site') {
     if ((state.sites || []).some(x => x.id === idx)) window.location.href = '/site/' + idx;
@@ -1521,6 +1715,7 @@ function pickSearchResult(type, idx) {
     const latlngs = r.geom.coordinates.map(c => [c[1], c[0]]);
     if (latlngs.length >= 2) map.fitBounds(latlngs, { maxZoom: 18 });
     else if (latlngs.length === 1) map.setView(latlngs[0], 18);
+    flashMapElement('route', r.id); addRecentlyViewed('route', r.id, r.name);
     openViewModal('route', r.id, r);
   } else if (type === 'addr') {
     if (!geoResult) return;
@@ -2170,14 +2365,836 @@ function updatePlanBanner() {
       banner.style.cssText = 'position:absolute;top:88px;left:50%;transform:translateX(-50%);z-index:1200;background:#7E57C2;color:#fff;padding:4px 14px;border-radius:0 0 8px 8px;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.25);pointer-events:none;';
       document.body.appendChild(banner);
     }
-    banner.textContent = '🧭 PLANNING MODE — live network is dimmed & read-only';
+    banner.innerHTML = '🧭 PLANNING MODE — live network is dimmed &amp; read-only &nbsp;<button onclick="batchPromote()" style="background:rgba(255,255,255,.25);border:none;color:#fff;border-radius:4px;padding:2px 10px;cursor:pointer;font-size:11px;font-weight:600;margin-left:8px;">⬆ Promote all to live</button>';
     banner.style.display = 'block';
   } else if (banner) {
     banner.style.display = 'none';
   }
 }
 
+
+
+
+// ── Toast notification system ─────────────────────────────────────────────────
+function showToast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  if (!c) return;
+  const t = document.createElement('div');
+  t.className = 'toast' + (type === 'ok' ? ' toast-ok' : type === 'warn' ? ' toast-warn' : type === 'err' ? ' toast-err' : '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 320); }, 3000);
+}
+
+// ── Locate me (GPS) ───────────────────────────────────────────────────────────
+function _dropLocateDot(lat, lng, label) {
+  if (window._locateDot) map.removeLayer(window._locateDot);
+  window._locateDot = L.circleMarker([lat, lng], {
+    radius: 9, color: '#1a73e8', fillColor: '#4dabf7', fillOpacity: 0.9, weight: 3
+  }).addTo(map).bindTooltip(label, { permanent: false });
+}
+
+function _locateByIP() {
+  showToast('GPS unavailable — trying approximate location…', 'warn');
+  fetch('https://ip-api.com/json/?fields=lat,lon,city,status')
+    .then(r => r.json())
+    .then(d => {
+      if (d.status !== 'success') throw new Error('IP lookup failed');
+      map.flyTo([d.lat, d.lon], 11, { animate: true, duration: 1 });
+      _dropLocateDot(d.lat, d.lon, `Approx. location: ${d.city} (IP-based, ~city accuracy)`);
+      showToast(`Approx: ${d.city} (IP-based)`, 'warn');
+    })
+    .catch(() => {
+      // Final fallback: click-to-place mode
+      showToast('Tap the map to mark your location', 'warn');
+      const prev = state.mode;
+      map.once('click', e => {
+        _dropLocateDot(e.latlng.lat, e.latlng.lng, 'Manually placed location');
+        showToast('Location marked', 'ok');
+      });
+    });
+}
+
+function locateMe() {
+  if (navigator.geolocation && window.isSecureContext) {
+    showToast('Locating via GPS…', 'info');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        map.flyTo([lat, lng], 16, { animate: true, duration: 1 });
+        _dropLocateDot(lat, lng, `Your location (±${Math.round(accuracy)} m)`);
+        showToast(`Located via GPS (±${Math.round(accuracy)} m)`, 'ok');
+      },
+      () => _locateByIP(),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  } else {
+    _locateByIP();
+  }
+}
+
+// ── Auto through-connect (IN→OUT fiber-for-fiber) ─────────────────────────────
+async function autoThroughConnect() {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c || !c.cables?.length) return;
+  const inCab  = c.cables.find(cab => cab.direction === 'IN');
+  const outCab = c.cables.find(cab => cab.direction === 'OUT');
+  if (!inCab || !outCab) {
+    showToast('Need at least one IN and one OUT cable', 'warn'); return;
+  }
+  const n = Math.min(inCab.fiber_count, outCab.fiber_count);
+  const taken = (cabId, fi) => c.splices.some(s =>
+    (s.from_cable_id === cabId && s.from_fiber === fi) ||
+    (s.to_cable_id   === cabId && s.to_fiber   === fi)
+  );
+  const jobs = []; let skipped = 0;
+  for (let i = 0; i < n; i++) {
+    if (taken(inCab.id, i) || taken(outCab.id, i)) { skipped++; continue; }
+    jobs.push(api('POST', '/splices', {
+      closure_id: c.id,
+      from_cable_id: inCab.id, from_fiber: i,
+      to_cable_id:  outCab.id, to_fiber:  i,
+      splice_type: state.spliceType
+    }).then(sp => c.splices.push(sp)).catch(() => skipped++));
+  }
+  await Promise.all(jobs);
+  // collect IDs of splices that were just added
+  const _tcNew = c.splices.slice(-(n - skipped)).map(s => s.id).filter(Boolean);
+  if (_tcNew.length) {
+    _spliceUndoStack.push({ ids: _tcNew, label: `through-connect ${_tcNew.length} fiber${_tcNew.length>1?'s':''}` });
+    updateSpliceUndoBtn();
+  }
+  renderPanel();
+  const done = n - skipped;
+  showToast(done > 0 ? `⇌ Through-connected ${done} fiber${done !== 1 ? 's' : ''}${skipped ? ` (${skipped} skipped)` : ''}` : 'All fibers already spliced', done > 0 ? 'ok' : 'warn');
+}
+
+// ── Live draw distance label ───────────────────────────────────────────────────
+let _drawLabelLayer = null;
+
+function updateDrawDistLabel(targetLatLng) {
+  if (!state.routePoints.length) { if (_drawLabelLayer) { map.removeLayer(_drawLabelLayer); _drawLabelLayer = null; } return; }
+  // Sum placed segments
+  let totalM = 0;
+  for (let i = 1; i < state.routePoints.length; i++) {
+    totalM += L.latLng(state.routePoints[i-1]).distanceTo(L.latLng(state.routePoints[i]));
+  }
+  // Add current cursor segment
+  if (targetLatLng) {
+    const last = state.routePoints[state.routePoints.length - 1];
+    totalM += L.latLng(last).distanceTo(targetLatLng);
+  }
+  const ft = Math.round(totalM * 3.28084);
+  const label = ft >= 5280 ? `${ft.toLocaleString()} ft (${(ft/5280).toFixed(2)} mi)` : `${ft.toLocaleString()} ft`;
+  const pos = targetLatLng || L.latLng(state.routePoints[state.routePoints.length - 1]);
+  if (_drawLabelLayer) map.removeLayer(_drawLabelLayer);
+  _drawLabelLayer = L.marker(pos, {
+    icon: L.divIcon({ className: 'draw-dist-label', html: label, iconAnchor: [-10, 10] }),
+    interactive: false
+  }).addTo(map);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Flash element on map ─────────────────────────────────────────────────────
+function flashMapElement(type, id) {
+  let lat, lng;
+  if (type === 'pole') {
+    const p = state.poles.find(x => x.id === id);
+    if (!p) return; [lng, lat] = p.geom.coordinates;
+  } else if (type === 'closure') {
+    const c = state.closures.find(x => x.id === id);
+    if (!c) return; [lng, lat] = c.geom.coordinates;
+  } else if (type === 'route') {
+    const r = state.routes.find(x => x.id === id);
+    if (!r || !r.geom?.coordinates?.length) return;
+    [lng, lat] = r.geom.coordinates[Math.floor(r.geom.coordinates.length / 2)];
+  }
+  if (lat == null) return;
+  const flash = L.circle([lat, lng], { radius: 40, color: '#ffeb3b', fillColor: '#ffeb3b', fillOpacity: 0.45, weight: 4, opacity: 1, interactive: false }).addTo(map);
+  let n = 0;
+  const iv = setInterval(() => {
+    n++;
+    flash.setStyle({ opacity: n % 2 === 0 ? 1 : 0.15, fillOpacity: n % 2 === 0 ? 0.45 : 0.05 });
+    if (n >= 6) { clearInterval(iv); map.removeLayer(flash); }
+  }, 180);
+}
+
+// ── Recently viewed ───────────────────────────────────────────────────────────
+const _recentlyViewed = [];
+const RV_ICONS = { pole: '🔷', closure: '📦', route: '〰', site: '🏢' };
+
+function addRecentlyViewed(type, id, name) {
+  const existing = _recentlyViewed.findIndex(x => x.type === type && x.id === id);
+  if (existing >= 0) _recentlyViewed.splice(existing, 1);
+  _recentlyViewed.unshift({ type, id, name });
+  if (_recentlyViewed.length > 6) _recentlyViewed.pop();
+}
+
+function renderRecentlyViewed() {
+  if (!_recentlyViewed.length) return;
+  let html = '<div class="sr-hdr">Recently viewed</div>';
+  _recentlyViewed.forEach(item => {
+    html += `<div class="sr-recent-item" onclick="pickSearchResult('${item.type}',${item.id})">
+      <span>${RV_ICONS[item.type] || '•'}</span>
+      <span>${h(item.name)}</span>
+      <span style="margin-left:auto;font-size:10px;opacity:.5;">${item.type}</span>
+    </div>`;
+  });
+  const el = document.getElementById('search-results');
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+// ── Element-specific right-click context menu ─────────────────────────────────
+// Element context menu — uses an action registry to avoid function serialisation
+const _elemCtxActions = [];
+
+function showElemCtxMenu(pt, items) {
+  hideCtxMenu();
+  _elemCtxActions.length = 0;
+  const menu = document.getElementById('map-ctx-menu');
+  menu.innerHTML = items.map((item, i) => {
+    if (item === null) return '<div class="ctx-divider"></div>';
+    _elemCtxActions[i] = item.action;
+    const parts = item.label.split(' ');
+    const icon = parts[0], text = parts.slice(1).join(' ');
+    return `<div class="ctx-item${item.danger ? ' ctx-danger' : ''}" onclick="hideCtxMenu();_elemCtxActions[${i}]&&_elemCtxActions[${i}]()">
+      <span class="ctx-ic">${icon}</span>${h(text)}
+    </div>`;
+  }).join('');
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const mw = 195, mh = items.filter(Boolean).length * 38 + items.filter(x=>!x).length * 9;
+  menu.style.left = ((pt.x + mw > vw) ? pt.x - mw : pt.x) + 'px';
+  menu.style.top  = ((pt.y + mh > vh) ? pt.y - mh : pt.y) + 'px';
+  menu.style.display = 'block';
+}
+
+// ── Export CSV ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['Type','Name','Latitude','Longitude','Notes','Fiber Count','Length (ft)','Plan'].join(',')];
+  (state.poles || []).forEach(p => {
+    const [lng, lat] = p.geom.coordinates;
+    rows.push([esc('Pole'),esc(p.name),lat.toFixed(6),lng.toFixed(6),esc(p.notes||''),'','',p.is_plan?'Yes':'No'].join(','));
+  });
+  (state.closures || []).forEach(c => {
+    const [lng, lat] = c.geom.coordinates;
+    rows.push([esc('Closure'),esc(c.name),lat.toFixed(6),lng.toFixed(6),esc(c.notes||''),'','',c.is_plan?'Yes':'No'].join(','));
+  });
+  (state.routes || []).forEach(r => {
+    const mid = r.geom?.coordinates?.[Math.floor((r.geom.coordinates.length||1)/2)] || [0,0];
+    const ft = r.length_m ? Math.round(r.length_m * 3.28084) : '';
+    rows.push([esc('Fiber'),esc(r.name),mid[1]?.toFixed(6)||'',mid[0]?.toFixed(6)||'',esc(r.notes||''),r.fiber_count||'',ft,r.is_plan?'Yes':'No'].join(','));
+  });
+  (state.sites || []).forEach(s => {
+    const [lng, lat] = s.geom.coordinates;
+    rows.push([esc('Site'),esc(s.name),lat.toFixed(6),lng.toFixed(6),esc(s.notes||''),'','','No'].join(','));
+  });
+  const blob = new Blob([rows.join('\r\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `fiber-network-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast(`CSV exported — ${rows.length - 1} records`, 'ok');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Cable route highlight (VERTO-style "show on map" from splice panel) ───────
+let _cableTraceHalos = [];
+
+function clearCableTrace() {
+  _cableTraceHalos.forEach(l => map.removeLayer(l));
+  _cableTraceHalos = [];
+  const b = document.getElementById('trace-banner');
+  if (b) b.style.display = 'none';
+}
+
+function highlightCableRoute(routeId, cableName) {
+  clearCableTrace();
+  const r = state.routes.find(x => x.id === routeId);
+  if (!r || !r.geom?.coordinates?.length) {
+    showToast('Route not loaded yet — try again after the map refreshes', 'warn'); return;
+  }
+  const latlngs = r.geom.coordinates.map(c => [c[1], c[0]]);
+  const halo = L.polyline(latlngs, { color: '#ffeb3b', weight: 12, opacity: 0.85, interactive: false }).addTo(map);
+  _cableTraceHalos.push(halo);
+  if (latlngs.length >= 2) {
+    map.fitBounds(L.latLngBounds(latlngs), { padding: [80, 80], maxZoom: 18 });
+  } else if (latlngs.length === 1) {
+    map.setView(latlngs[0], 16);
+  }
+  // Show persistent trace banner
+  let banner = document.getElementById('trace-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'trace-banner';
+    banner.style.cssText = 'position:absolute;top:88px;left:50%;transform:translateX(-50%);z-index:1200;background:#1565c0;color:#fff;padding:4px 16px;border-radius:0 0 8px 8px;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;gap:10px;';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `<span>🗺 Highlighting: ${cableName || r.name}</span><button onclick="clearCableTrace()" style="background:rgba(255,255,255,.25);border:none;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">× Clear</button>`;
+  banner.style.display = 'flex';
+}
+
+// ── Keyboard shortcut help modal ──────────────────────────────────────────────
+function showShortcutHelp() {
+  // Toggle off if already open
+  if (document.getElementById('shortcut-help-modal')) {
+    document.getElementById('shortcut-help-modal').remove(); return;
+  }
+  const bg = document.createElement('div');
+  bg.id = 'shortcut-help-modal';
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal" style="max-width:420px;">
+    <h2 style="margin:0 0 16px;font-size:16px;">⌨ Keyboard Shortcuts</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:13px;">
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">S</kbd> Select mode</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">P</kbd> Add Pole</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">C</kbd> Add Closure</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">F</kbd> Draw Fiber</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">E</kbd> Edit mode</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">M</kbd> Measure</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">/</kbd> Focus search</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">?</kbd> This help</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">Ctrl Z</kbd> Undo</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">Esc</kbd> Cancel / close</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">D</kbd> Toggle dark mode</div>
+      <div><kbd style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:1px 6px;font-family:monospace;">H</kbd> Fit all in view</div>
+    </div>
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#888;">
+      Right-click poles &amp; closures on the map for quick actions.<br>
+      Click 🗺 on any cable in the splice panel to highlight its route.
+    </div>
+    <div style="margin-top:14px;text-align:right;">
+      <button onclick="document.getElementById('shortcut-help-modal').remove()" style="padding:7px 18px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;font-size:13px;">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Copy view link ─────────────────────────────────────────────────────────────
+function copyViewLink() {
+  const c = map.getCenter(), z = map.getZoom();
+  const url = `${location.origin}${location.pathname}?lat=${c.lat.toFixed(5)}&lng=${c.lng.toFixed(5)}&zoom=${z}`;
+  navigator.clipboard.writeText(url)
+    .then(() => showToast('🔗 View link copied to clipboard', 'ok'))
+    .catch(() => showToast('Copy failed — browser may require HTTPS', 'warn'));
+}
+
+// ── Route focus / isolation mode ───────────────────────────────────────────────
+let _focusRouteId = null;
+
+function focusRoute(routeId, routeName) {
+  _focusRouteId = routeId;
+  renderMap();
+  // Focus banner
+  let b = document.getElementById('focus-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'focus-banner';
+    b.style.cssText = 'position:absolute;top:88px;left:50%;transform:translateX(-50%);z-index:1200;background:#0891b2;color:#fff;padding:4px 16px;border-radius:0 0 8px 8px;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;gap:10px;';
+    document.body.appendChild(b);
+  }
+  b.innerHTML = `<span>🔍 Focused on: ${routeName}</span><button onclick="clearRouteFocus()" style="background:rgba(255,255,255,.25);border:none;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">× Exit focus</button>`;
+  b.style.display = 'flex';
+}
+
+function clearRouteFocus() {
+  _focusRouteId = null;
+  renderMap();
+  const b = document.getElementById('focus-banner');
+  if (b) b.style.display = 'none';
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Fit all network elements in view ─────────────────────────────────────────
+function fitAllElements() {
+  const coords = [];
+  (state.poles || []).forEach(p => { if (p.geom) coords.push([p.geom.coordinates[1], p.geom.coordinates[0]]); });
+  (state.closures || []).forEach(c => { if (c.geom) coords.push([c.geom.coordinates[1], c.geom.coordinates[0]]); });
+  (state.sites || []).forEach(s => { if (s.geom) coords.push([s.geom.coordinates[1], s.geom.coordinates[0]]); });
+  (state.routes || []).forEach(r => {
+    if (r.geom?.coordinates) r.geom.coordinates.forEach(c => coords.push([c[1], c[0]]));
+  });
+  if (!coords.length) { showToast('No elements on this layer to fit', 'warn'); return; }
+  map.fitBounds(L.latLngBounds(coords), { padding: [40, 40], maxZoom: 18 });
+}
+
+// ── Reverse-connect (cross-connect pairing: F1↔Flast, F2↔F(last-1)…) ────────
+async function autoReverseConnect() {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c || !c.cables?.length) return;
+  const inCab  = c.cables.find(cab => cab.direction === 'IN');
+  const outCab = c.cables.find(cab => cab.direction === 'OUT');
+  if (!inCab || !outCab) { showToast('Need at least one IN and one OUT cable', 'warn'); return; }
+  const n = Math.min(inCab.fiber_count, outCab.fiber_count);
+  const taken = (cabId, fi) => c.splices.some(s =>
+    (s.from_cable_id === cabId && s.from_fiber === fi) ||
+    (s.to_cable_id   === cabId && s.to_fiber   === fi)
+  );
+  const jobs = []; let skipped = 0;
+  for (let i = 0; i < n; i++) {
+    const j = outCab.fiber_count - 1 - i; // reversed index
+    if (taken(inCab.id, i) || taken(outCab.id, j)) { skipped++; continue; }
+    jobs.push(api('POST', '/splices', {
+      closure_id: c.id,
+      from_cable_id: inCab.id, from_fiber: i,
+      to_cable_id:  outCab.id, to_fiber:  j,
+      splice_type: state.spliceType
+    }).then(sp => c.splices.push(sp)).catch(() => skipped++));
+  }
+  await Promise.all(jobs);
+  renderPanel();
+  const done = n - skipped;
+  showToast(done > 0 ? `⇄ Reverse-connected ${done} fiber${done !== 1 ? 's' : ''}${skipped ? ` (${skipped} skipped)` : ''}` : 'All fibers already spliced', done > 0 ? 'ok' : 'warn');
+}
+
+// ── Find next unconnected fiber in the current closure ───────────────────────
+function findUnconnectedInClosure() {
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c || !c.cables?.length) return;
+  const connectedSet = new Set((c.splices || []).flatMap(s => [
+    `${s.from_cable_id}-${s.from_fiber}`, `${s.to_cable_id}-${s.to_fiber}`
+  ]));
+  for (const cab of c.cables) {
+    for (let fi = 0; fi < cab.fiber_count; fi++) {
+      if (!connectedSet.has(`${cab.id}-${fi}`)) {
+        // Expand that cable and scroll to the fiber
+        if (!panelState.expandedCables.has(cab.id)) {
+          panelState.expandedCables.add(cab.id);
+          renderPanel();
+        }
+        const el = document.getElementById(`port-${cab.id}-${fi}`);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.closest('.fiber-row')?.classList.add('hl'); setTimeout(() => el.closest('.fiber-row')?.classList.remove('hl'), 2000); }
+        showToast(`Next unconnected: ${cab.name} F${fi + 1}`, 'info');
+        return;
+      }
+    }
+  }
+  showToast('All fibers are connected!', 'ok');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Network health check ──────────────────────────────────────────────────────
+function runHealthCheck() {
+  const issues = [];
+  state.closures.forEach(c => {
+    if (!Array.isArray(c.splices) || !Array.isArray(c.cables)) return;
+    const totalF = c.cables.reduce((s,ca)=>s+(ca.fiber_count||0),0);
+    if (totalF > 0 && c.splices.length === 0)
+      issues.push({ sev:'warn', msg:`Closure <b>${h(c.name)}</b> — ${totalF} fibers, no splices documented.`, fn:()=>openClosurePanel(c.id) });
+    const usedF = new Set(c.splices.flatMap(s=>[`${s.from_cable_id}-${s.from_fiber}`,`${s.to_cable_id}-${s.to_fiber}`])).size;
+    if (totalF > 0 && usedF >= totalF)
+      issues.push({ sev:'info', msg:`Closure <b>${h(c.name)}</b> is at full capacity (${usedF}/${totalF} strands used).`, fn:()=>openClosurePanel(c.id) });
+  });
+  (state.routes||[]).forEach(r => {
+    if (!r.is_plan && !(r.attached_poles||[]).length)
+      issues.push({ sev:'warn', msg:`Fiber route <b>${h(r.name)}</b> has no poles attached.`, fn:()=>openViewModal('route',r.id,r) });
+  });
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  const rows = issues.length
+    ? issues.map((iss,i)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;">
+        <span style="font-size:15px;flex-shrink:0;">${iss.sev==='warn'?'⚠️':'ℹ️'}</span>
+        <span style="font-size:12px;flex:1;line-height:1.5;">${iss.msg}</span>
+        <button onclick="_hcActs[${i}]()" style="font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:3px;cursor:pointer;background:white;flex-shrink:0;">Go →</button>
+      </div>`).join('')
+    : '<div style="text-align:center;padding:24px;color:#22c55e;font-size:14px;">✅ No issues found!</div>';
+  const note = state.closures.some(c=>!Array.isArray(c.splices)) ? '<p style="font-size:11px;color:#999;margin:0 0 10px;">Tip: open each closure to load full splice data for a complete audit.</p>' : '';
+  bg.innerHTML = `<div class="modal" style="max-width:500px;">
+    <h2 style="margin:0 0 4px;font-size:16px;">🏥 Network Health Check</h2>
+    <p style="margin:0 0 10px;font-size:12px;color:#888;">${issues.length} issue${issues.length===1?'':'s'} found</p>
+    ${note}<div style="max-height:360px;overflow-y:auto;">${rows}</div>
+    <div style="margin-top:14px;text-align:right;"><button onclick="this.closest('.modal-bg').remove()" style="padding:7px 18px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;">Close</button></div>
+  </div>`;
+  window._hcActs = issues.map(i=>()=>{bg.remove();i.fn();});
+  document.body.appendChild(bg);
+  bg.addEventListener('click',e=>{if(e.target===bg)bg.remove();});
+}
+
+// ── Copy route path summary ───────────────────────────────────────────────────
+function copyRouteSummary(routeId, obj) {
+  const closures = state.closures.filter(cl=>cl.cables?.some(cab=>cab.route_id===routeId)).map(cl=>cl.name);
+  const poles = (obj.attached_poles||[]).map(pid=>{const p=state.poles.find(x=>x.id===pid);return p?.name||'#'+pid;});
+  const ft = obj.length_m ? Math.round(obj.length_m*3.28084).toLocaleString()+' ft' : '';
+  let summary = [obj.name, `${obj.fiber_count||'?'}F`, ft, obj.buried?'Buried':'Aerial'].filter(Boolean).join(' · ');
+  if (closures.length) summary += '\nClosures: ' + closures.join(' → ');
+  if (poles.length) summary += '\nPoles: ' + poles.join(', ');
+  navigator.clipboard.writeText(summary)
+    .then(()=>showToast('📋 Path summary copied','ok'))
+    .catch(()=>showToast('Copy failed','err'));
+}
+
+// ── Splice notes editor ───────────────────────────────────────────────────────
+async function editSpliceNotes(spliceId) {
+  const c = state.closures.find(x=>x.id===state.selectedClosure);
+  if (!c) return;
+  const s = (c.splices||[]).find(x=>x.id===spliceId);
+  if (!s) return;
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal" style="max-width:360px;">
+    <h2 style="margin:0 0 12px;font-size:15px;">💬 Splice note</h2>
+    <textarea id="sn-ta" rows="3" placeholder="e.g. Colour-coded with red tape; re-spliced 2026-06-15" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:5px;font-size:13px;resize:vertical;">${h(s.notes||'')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+      <button onclick="this.closest('.modal-bg').remove()" style="padding:7px 14px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;">Cancel</button>
+      <button class="btn-primary" id="sn-save">Save</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click',e=>{if(e.target===bg)bg.remove();});
+  document.getElementById('sn-save').onclick = async () => {
+    const notes = document.getElementById('sn-ta').value.trim()||null;
+    try {
+      const updated = await api('PUT','/splices/'+spliceId,{notes});
+      s.notes = updated.notes; bg.remove(); renderPanel();
+      showToast(notes?'Note saved':'Note cleared','ok');
+    } catch(e){showToast('Save failed','err');}
+  };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Batch promote all planning items ─────────────────────────────────────────
+async function batchPromote() {
+  const planPoles   = state.poles.filter(p => p.is_plan);
+  const planRoutes  = (state.routes||[]).filter(r => r.is_plan);
+  const total = planPoles.length + planRoutes.length;
+  if (!total) { showToast('No planning items to promote', 'warn'); return; }
+  if (!confirm(`Promote all ${total} planned item${total===1?'':'s'} to the live network?\n\n${planPoles.length} pole${planPoles.length===1?'':'s'}, ${planRoutes.length} fiber route${planRoutes.length===1?'':'s'}`)) return;
+  showToast('Promoting…', 'info');
+  let done = 0, failed = 0;
+  // Promote plan routes first (need fiber count dialog — use default 12)
+  for (const r of planRoutes) {
+    try {
+      const updated = await api('POST', `/routes/${r.id}/promote`, { fiber_count: r.fiber_count || 12 });
+      Object.assign(r, updated); done++;
+    } catch(_) { failed++; }
+  }
+  for (const p of planPoles) {
+    try {
+      const updated = await api('POST', `/poles/${p.id}/promote`);
+      Object.assign(p, updated); done++;
+    } catch(_) { failed++; }
+  }
+  renderMap();
+  showToast(`⬆ Promoted ${done} item${done===1?'':'s'}${failed?` (${failed} failed)`:''}`, done > 0 ? 'ok' : 'err');
+}
+
+// ── Export full network JSON ──────────────────────────────────────────────────
+async function exportNetworkJSON() {
+  showToast('Preparing JSON export…', 'info');
+  try {
+    const data = await api('GET', '/export/full');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fiber-network-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`✓ Exported ${data.poles.length} poles, ${data.closures.length} closures, ${data.routes.length} routes`, 'ok');
+  } catch(e) { showToast('Export failed: ' + e.message, 'err'); }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Relative time helper ──────────────────────────────────────────────────────
+function relativeTime(iso) {
+  const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (d < 60) return 'just now';
+  if (d < 3600) return `${Math.floor(d/60)} min ago`;
+  if (d < 86400) return `${Math.floor(d/3600)} hr ago`;
+  if (d < 86400*7) return `${Math.floor(d/86400)} day${Math.floor(d/86400)>1?'s':''} ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+// ── Strand trace from closure panel ──────────────────────────────────────────
+async function traceStrand(routeId, fiberIdx) {
+  showToast('Tracing fiber…', 'info');
+  try {
+    const result = await api('GET', `/trace?route=${routeId}&fiber=${fiberIdx}`);
+    // Highlight all routes on the map
+    _cableTraceHalos.forEach(l => map.removeLayer(l));
+    _cableTraceHalos = [];
+    (result.route_ids || []).forEach(rid => {
+      const r = state.routes.find(x => x.id === rid);
+      if (!r?.geom?.coordinates) return;
+      const coords = r.geom.coordinates.map(c => [c[1], c[0]]);
+      _cableTraceHalos.push(L.polyline(coords, { color: '#ffeb3b', weight: 12, opacity: 0.85, interactive: false }).addTo(map));
+    });
+    // Zoom to path
+    const allCoords = (result.route_ids || []).flatMap(rid => {
+      const r = state.routes.find(x => x.id === rid);
+      return r?.geom?.coordinates?.map(c => [c[1], c[0]]) || [];
+    });
+    if (allCoords.length) map.fitBounds(L.latLngBounds(allCoords), { padding: [80, 80], maxZoom: 18 });
+    // Show result banner
+    showTraceResultBanner(result);
+  } catch(e) { showToast('Trace failed: ' + (e.message||'unknown error'), 'err'); }
+}
+
+function showTraceResultBanner(result) {
+  const endStep = result.steps?.filter(s => s.node?.type === 'port').pop();
+  const endLabel = endStep ? endStep.node.label : (result.steps?.length ? result.steps[result.steps.length-1].node?.label : null);
+  const loss = typeof result.total_loss_db === 'number' ? result.total_loss_db : null;
+  const lossColor = loss === null ? '#fff' : loss > 28 ? '#fca5a5' : loss > 20 ? '#fde68a' : '#86efac';
+  const routeCount = (result.route_ids||[]).length;
+  let html = `<span>🔍 Traced: ${result.start?.label||'unknown'}</span>`;
+  if (endLabel && endLabel !== result.start?.label) html += `<span style="opacity:.7;font-size:11px;"> → ${endLabel}</span>`;
+  if (loss !== null) html += `<span style="background:${lossColor};color:#111;border-radius:4px;padding:1px 6px;font-size:11px;margin-left:6px;">${loss.toFixed(1)} dB</span>`;
+  if (routeCount > 1) html += `<span style="opacity:.6;font-size:11px;margin-left:6px;">${routeCount} routes</span>`;
+  html += `<button onclick="clearCableTrace()" style="background:rgba(255,255,255,.25);border:none;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">× Clear</button>`;
+
+  let b = document.getElementById('trace-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'trace-banner';
+    b.style.cssText = 'position:absolute;top:88px;left:50%;transform:translateX(-50%);z-index:1200;background:#1565c0;color:#fff;padding:4px 16px;border-radius:0 0 8px 8px;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;gap:10px;';
+    document.body.appendChild(b);
+  }
+  b.innerHTML = html;
+  b.style.display = 'flex';
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Asset status ─────────────────────────────────────────────────────────────
+const STATUS_COLORS = { active: '#22c55e', under_construction: '#f59e0b', decommissioned: '#9e9e9e' };
+const STATUS_LABELS = { active: 'Active', under_construction: 'Under Construction', decommissioned: 'Decommissioned' };
+
+
+// ── Splice-panel undo stack ────────────────────────────────────────────────────
+let _spliceUndoStack = [];
+
+function updateSpliceUndoBtn() {
+  const btn = document.getElementById('splice-undo-btn');
+  if (!btn) return;
+  const hasItems = _spliceUndoStack.length > 0;
+  btn.disabled = !hasItems;
+  btn.style.opacity = hasItems ? '1' : '.4';
+  btn.title = hasItems
+    ? `↩ Undo: ${_spliceUndoStack[_spliceUndoStack.length-1].label}`
+    : 'Nothing to undo';
+}
+
+async function undoLastSplice() {
+  if (!_spliceUndoStack.length) return;
+  const { ids, label } = _spliceUndoStack.pop();
+  updateSpliceUndoBtn();
+  const c = state.closures.find(x => x.id === state.selectedClosure);
+  if (!c) return;
+  try {
+    await Promise.all(ids.map(id => api('DELETE', '/splices/' + id)));
+    c.splices = c.splices.filter(s => !ids.includes(s.id));
+    renderPanel();
+    showToast(`↩ Undid: ${label}`, 'ok');
+  } catch(e) { showToast('Splice undo failed', 'err'); }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Undo stack ────────────────────────────────────────────────────────────────
+const _undoStack = [];
+function updateUndoHint() {
+  const btn = document.getElementById('btn-undo');
+  if (btn) {
+    btn.disabled = _undoStack.length === 0;
+    btn.title = _undoStack.length ? `Undo: remove last ${_undoStack[_undoStack.length-1].type} (Ctrl+Z)` : 'Nothing to undo';
+  }
+}
+async function undoLastAction() {
+  if (!_undoStack.length) return;
+  const { type, id } = _undoStack.pop();
+  updateUndoHint();
+  try {
+    if (type === 'pole') {
+      await api('DELETE', '/poles/' + id);
+      state.poles = state.poles.filter(p => p.id !== id);
+      state.closures.forEach(c => { if (c.pole_id === id) c.pole_id = null; });
+    } else if (type === 'closure') {
+      await api('DELETE', '/closures/' + id);
+      state.closures = state.closures.filter(c => c.id !== id);
+    } else if (type === 'route') {
+      await api('DELETE', '/routes/' + id);
+      state.routes = state.routes.filter(r => r.id !== id);
+    }
+    renderMap();
+    showToast(`↩ Undid: removed ${type}`, 'ok');
+  } catch(e) { console.error('Undo failed:', e); showToast('Undo failed', 'err'); }
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', (ev) => {
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (ev.ctrlKey || ev.metaKey) {
+    if (ev.key === 'z' || ev.key === 'Z') { ev.preventDefault(); undoLastAction(); }
+    return;
+  }
+  switch (ev.key.toLowerCase()) {
+    case 's': setMode('select'); break;
+    case 'p': setMode('pole'); break;
+    case 'c': setMode('closure'); break;
+    case 'f': setMode('route'); break;
+    case 'e': setMode('edit'); break;
+    case 'm': setMode('measure'); break;
+    case '/': ev.preventDefault(); document.getElementById('search-input')?.focus(); break;
+    case '?': showShortcutHelp(); break;
+    case 'd': setDarkMode(!layerPrefs.darkMode); break;
+    case 'h': fitAllElements(); break;
+  }
+});
+
+// ── Zoom to entity ────────────────────────────────────────────────────────────
+function zoomToEntity(obj) {
+  if (!obj || !obj.geom) return;
+  const g = obj.geom;
+  let lat, lng;
+  if (g.type === 'Point') {
+    [lng, lat] = g.coordinates;
+    map.flyTo([lat, lng], Math.max(map.getZoom(), 17), { animate: true, duration: 0.7 });
+  } else if (g.type === 'LineString' && g.coordinates.length) {
+    const mid = g.coordinates[Math.floor(g.coordinates.length / 2)];
+    [lng, lat] = mid;
+    map.flyTo([lat, lng], Math.max(map.getZoom(), 15), { animate: true, duration: 0.7 });
+  }
+}
+
+// ── Network stats ─────────────────────────────────────────────────────────────
+function refreshNetStats() {
+  const panel = document.getElementById('ns-body');
+  if (!panel || document.getElementById('net-stats').style.display === 'none') return;
+  const totalFtRaw = (state.routes || []).reduce((s, r) => s + (r.length_m || 0), 0);
+  const totalFt = Math.round(totalFtRaw * 3.28084);
+  const totalMi = (totalFt / 5280).toFixed(2);
+  const lenStr = totalFt >= 5280 ? `${totalFt.toLocaleString()} ft (${totalMi} mi)` : `${totalFt.toLocaleString()} ft`;
+  const live = (s) => s.filter(x => !x.is_plan);
+  const plan = (s) => s.filter(x =>  x.is_plan);
+  const lp = (arr) => {
+    const l = live(arr).length, p = plan(arr).length;
+    return p ? `${l} <span style="color:#a78bfa;font-size:10px;">(+${p} plan)</span>` : `${l}`;
+  };
+  panel.innerHTML = `
+    <div class="ns-row"><span>Poles</span><span class="ns-val">${lp(state.poles||[])}</span></div>
+    <div class="ns-row"><span>Closures</span><span class="ns-val">${lp(state.closures||[])}</span></div>
+    <div class="ns-row"><span>Fiber routes</span><span class="ns-val">${lp(state.routes||[])}</span></div>
+    <div class="ns-row"><span>Sites</span><span class="ns-val">${(state.sites||[]).length}</span></div>
+    <div style="border-top:1px solid rgba(255,255,255,.1);margin:7px 0;"></div>
+    <div class="ns-row"><span>Total fiber</span><span class="ns-val">${lenStr}</span></div>
+  `;
+}
+// Show stats toggle after map loads — hook into renderMap
+const _origRenderMap = typeof renderMap === 'function' ? null : null; // will patch below
+
+// ── Measure tool ──────────────────────────────────────────────────────────────
+let _mPts = [], _mLines = [], _mMarkers = [], _mLabelLayer = null;
+
+function clearDrawDist() {
+  if (_drawLabelLayer) { map.removeLayer(_drawLabelLayer); _drawLabelLayer = null; }
+}
+function clearMeasure() {
+  _mPts = [];
+  _mLines.forEach(l => map.removeLayer(l)); _mLines = [];
+  _mMarkers.forEach(m => map.removeLayer(m)); _mMarkers = [];
+  if (_mLabelLayer) { map.removeLayer(_mLabelLayer); _mLabelLayer = null; }
+}
+
+function measureClick(latlng) {
+  _mPts.push(latlng);
+  const dot = L.circleMarker(latlng, { radius: 4, color: '#00897b', fillColor: '#00bfa5', fillOpacity: 1, weight: 2 }).addTo(map);
+  _mMarkers.push(dot);
+  if (_mPts.length > 1) {
+    const a = _mPts[_mPts.length - 2], b = _mPts[_mPts.length - 1];
+    const seg = L.polyline([a, b], { color: '#00bfa5', weight: 2.5, dashArray: '6,4', opacity: 0.9 }).addTo(map);
+    _mLines.push(seg);
+    // Running total label
+    const totalM = _mPts.reduce((s, p, i) => i === 0 ? 0 : s + _mPts[i-1].distanceTo(p), 0);
+    const ft = Math.round(totalM * 3.28084);
+    const label = ft >= 5280 ? `${ft.toLocaleString()} ft (${(ft/5280).toFixed(2)} mi)` : `${ft.toLocaleString()} ft`;
+    if (_mLabelLayer) map.removeLayer(_mLabelLayer);
+    _mLabelLayer = L.marker(b, {
+      icon: L.divIcon({ className: 'measure-tooltip', html: label, iconAnchor: [-8, 10] }),
+      interactive: false
+    }).addTo(map);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Right-click context menu ──────────────────────────────────────────────────
+let _ctxLatlng = null;
+
+function showCtxMenu(latlng, pt) {
+  _ctxLatlng = latlng;
+  const menu = document.getElementById('map-ctx-menu');
+  const canPlan = state.planMode || true;
+  menu.innerHTML = `
+    <div class="ctx-item" onclick="ctxPlace('pole')"><span class="ctx-ic">+</span>Add Pole here</div>
+    <div class="ctx-item" onclick="ctxPlace('closure')"><span class="ctx-ic">◉</span>Add Closure here</div>
+    <div class="ctx-item" onclick="ctxPlace('ped')"><span class="ctx-ic">◈</span>Add Pedestal here</div>
+    <div class="ctx-item" onclick="ctxPlace('route')"><span class="ctx-ic">∿</span>Draw Fiber from here</div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" onclick="ctxAddSite()"><span class="ctx-ic">🏢</span>Add Site here</div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" onclick="ctxCopyCoords()"><span class="ctx-ic">⎘</span>Copy coordinates</div>
+    <div class="ctx-item" onclick="copyViewLink()"><span class="ctx-ic">🔗</span>Copy view link</div>
+  `;
+  // Keep menu inside viewport
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const mw = 185, mh = 230;
+  const x = (pt.x + mw > vw) ? pt.x - mw : pt.x;
+  const y = (pt.y + mh > vh) ? pt.y - mh : pt.y;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  menu.style.display = 'block';
+}
+
+function hideCtxMenu() {
+  const menu = document.getElementById('map-ctx-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+function ctxPlace(mode) {
+  const ll = _ctxLatlng;
+  hideCtxMenu();
+  if (!ll) return;
+  setMode(mode);
+  onMapClick({ latlng: ll });
+}
+
+function ctxAddSite() {
+  const ll = _ctxLatlng;
+  hideCtxMenu();
+  if (!ll) return;
+  // Show site type picker then place directly at right-clicked coords
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal" style="max-width:320px;">
+    <h2 style="margin:0 0 14px;">Choose site type</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+      <button class="site-type-btn" data-type="office"         style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>🏢</span><span style="font-size:12px;font-weight:600;color:#333;">Office</span></button>
+      <button class="site-type-btn" data-type="pole_cabinet"   style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>📦</span><span style="font-size:12px;font-weight:600;color:#333;">Pole Cabinet</span></button>
+      <button class="site-type-btn" data-type="ground_cabinet" style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>🗄️</span><span style="font-size:12px;font-weight:600;color:#333;">Ground Cabinet</span></button>
+      <button class="site-type-btn" data-type="hut"            style="padding:16px 10px;border:1px solid #ddd;border-radius:8px;background:white;cursor:pointer;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:6px;"><span>🏠</span><span style="font-size:12px;font-weight:600;color:#333;">Hut</span></button>
+    </div>
+    <div style="text-align:right;margin-top:4px;"><button id="ctx-site-cancel" style="padding:8px 16px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;">Cancel</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', ev => { if (ev.target === bg) bg.remove(); });
+  bg.querySelectorAll('.site-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      bg.remove();
+      promptCreateSite(ll, type);
+    });
+  });
+  bg.querySelector('#ctx-site-cancel').onclick = () => bg.remove();
+}
+
+function ctxCopyCoords() {
+  if (!_ctxLatlng) return;
+  const str = `${_ctxLatlng.lat.toFixed(6)}, ${_ctxLatlng.lng.toFixed(6)}`;
+  hideCtxMenu();
+  navigator.clipboard.writeText(str).catch(() => {});
+}
+// ─────────────────────────────────────────────────────────────────────────────
 function setMode(m) {
+  if (m !== 'measure') clearMeasure();
+  if (m !== 'route') clearDrawDist();
   if (state.selectRect) { map.removeLayer(state.selectRect); state.selectRect = null; }
   state.dragStart = null;
   if (map) map.dragging.enable();
@@ -2239,7 +3256,7 @@ function setMode(m) {
   clearPreview();
   state.mode = m;
   document.querySelectorAll('.tb').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-' + m).classList.add('active');
+  const _btn = document.getElementById('btn-' + m); if (_btn) _btn.classList.add('active');
   const hints = {
     select: 'Click a closure to view splices',
     closure: 'Click on the map to place a splice closure',
@@ -2369,6 +3386,14 @@ const _traceRouteIds = new Set(
   (new URLSearchParams(location.search).get('trace') || '')
     .split(',').map(Number).filter(Boolean)
 );
+// Shareable view link: /?lat=X&lng=Y&zoom=Z
+(function() {
+  const _p = new URLSearchParams(location.search);
+  const _lat = parseFloat(_p.get('lat')), _lng = parseFloat(_p.get('lng')), _z = parseInt(_p.get('zoom'));
+  if (!isNaN(_lat) && !isNaN(_lng)) {
+    setTimeout(() => { if (typeof map !== 'undefined' && map) map.setView([_lat, _lng], isNaN(_z) ? 16 : _z); }, 800);
+  }
+})();
 let _traceHalos = [];
 let _routeHits = [];   // transparent wide click/hover targets over thin route lines
 let _traceZoomed = false;
@@ -2384,9 +3409,13 @@ function zoomToTrace() {
 
 // Pole ID labels are only shown when zoomed in, to avoid clutter at wide zoom.
 const POLE_LABEL_ZOOM = 16;
+const ROUTE_LABEL_ZOOM = 15;
 function updatePoleLabelVisibility() {
   const el = document.getElementById('map');
-  if (el && map) el.classList.toggle('show-pole-labels', map.getZoom() >= POLE_LABEL_ZOOM);
+  if (el && map) {
+    el.classList.toggle('show-pole-labels',  (layerPrefs.showPoleLabels  !== false) && map.getZoom() >= POLE_LABEL_ZOOM);
+    el.classList.toggle('show-route-labels', (layerPrefs.showRouteLabels !== false) && map.getZoom() >= ROUTE_LABEL_ZOOM);
+  }
 }
 
 function renderMap() {
@@ -2396,8 +3425,19 @@ function renderMap() {
   Object.values(state.poleMarkers).forEach(m => map.removeLayer(m));
   Object.values(state.siteMarkers).forEach(m => map.removeLayer(m));
   Object.values(state.routeLayers).forEach(m => map.removeLayer(m));
+  // Show stats toggle once we have data; refresh if panel open
+  const _nsToggle = document.getElementById('net-stats-toggle');
+  if (_nsToggle && state.poles) _nsToggle.style.display = 'block';
+  refreshNetStats();
   _traceHalos.forEach(m => map.removeLayer(m));
   _traceHalos = [];
+  // Precompute focus sets (used by closure/pole/route rendering below)
+  const _focusedPoleIds = _focusRouteId
+    ? new Set((state.routes.find(r => r.id === _focusRouteId)?.attached_poles || []))
+    : null;
+  const _focusedClosureIds = _focusRouteId
+    ? new Set(state.closures.filter(cl => cl.cables?.some(cab => cab.route_id === _focusRouteId)).map(cl => cl.id))
+    : null;
   _routeHits.forEach(m => map.removeLayer(m));
   _routeHits = [];
   state.closureMarkers = {};
@@ -2417,9 +3457,15 @@ function renderMap() {
     const fiberCount = (c.cables && c.cables.length)
       ? c.cables.reduce((s, ca) => s + (ca.fiber_count || 0), 0)
       : '';
+    const _closureColor = '#1565c0';
+    // Focus dimming
+    const _clFocusDim = _focusRouteId && !_focusedClosureIds?.has(c.id);
+    const _clStatusDot = c.status && c.status !== 'active'
+      ? `<div style="position:absolute;top:-4px;right:-4px;width:9px;height:9px;border-radius:50%;background:${STATUS_COLORS[c.status]||'#999'};border:1.5px solid white;box-shadow:0 1px 2px rgba(0,0,0,.3);"></div>`
+      : '';
     const icon = L.divIcon({
       className: '',
-      html: `<div class="closure-icon"><span>${fiberCount}</span></div>`,
+      html: `<div class="closure-icon" style="background:${_closureColor};opacity:${_clFocusDim ? 0.15 : 1};position:relative;">${_clStatusDot}<span>${fiberCount}</span></div>`,
       iconSize: [28, 28], iconAnchor: [14, 14]
     });
     const isEdit = state.mode === 'edit';
@@ -2467,6 +3513,24 @@ function renderMap() {
     const snapPole = c.pole_id ? state.poles.find(p => p.id === c.pole_id) : null;
     marker.bindTooltip(c.name + (snapPole ? ` @ ${h(snapPole.name)}` : ''), { direction: 'top' });
     state.closureMarkers[c.id] = marker;
+    if (!c.pole_id || true) marker.on('contextmenu', (e) => {
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e.originalEvent);
+      const pt = map.latLngToContainerPoint(e.latlng);
+      showElemCtxMenu(pt, [
+        { label: '📦 Open splice panel', action: () => openClosurePanel(c.id) },
+        { label: '🖨 Print splice sheet', action: () => printSpliceSheet(c.id) },
+        { label: '✏ Edit', action: () => openEditModal('closure', c.id, c) },
+        { label: '🎯 Zoom to', action: () => { const [lg,lt]=c.geom.coordinates; map.flyTo([lt,lg],17,{animate:true,duration:.7}); } },
+        null,
+        { label: '🗑 Delete closure', danger: true, action: async () => {
+          if (!confirm(`Delete closure "${c.name}"?`)) return;
+          await api('DELETE', '/closures/' + c.id);
+          state.closures = state.closures.filter(x => x.id !== c.id);
+          renderMap(); showToast(`Deleted closure ${c.name}`, 'warn');
+        }}
+      ]);
+    });
   });
 
   // Render poles
@@ -2476,6 +3540,7 @@ function renderMap() {
     // Symmetric dimming: an object is dimmed/read-only when its plan-ness doesn't
     // match the current mode (plan objects dim in normal mode, live objects dim in plan mode).
     const dimmed = state.planMode ? !isPlan : isPlan;
+    const _poleFocusDim = _focusRouteId && !_focusedPoleIds?.has(p.id);
     const isPed = p.structure_type === 'pedestal';
     const [lng, lat] = p.geom.coordinates;
     const poleClosureCount = state.closures.filter(c => c.pole_id === p.id).length;
@@ -2486,10 +3551,14 @@ function renderMap() {
     const poleFill = isPlan ? '#7E57C2' : (isPed ? '#00695C' : '#5D4037');
     const sz = isPed ? 13 : 10;                      // pedestals render as a slightly larger square
     const radius = isPed ? '2px' : '50%';
+    const _pStatusDot = p.status && p.status !== 'active'
+      ? `<div style="position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;background:${STATUS_COLORS[p.status]||'#999'};border:1.5px solid white;box-shadow:0 1px 2px rgba(0,0,0,.3);"></div>`
+      : '';
     const icon = L.divIcon({
       className: '',
       html: `<div style="position:relative;width:${sz}px;height:${sz}px;">
-        <div style="width:${sz}px;height:${sz}px;background:${poleFill};border:2px solid ${hasClosure ? '#1565c0' : 'white'};border-radius:${radius};box-shadow:0 1px 3px rgba(0,0,0,.3);opacity:${dimmed ? 0.3 : 1};box-sizing:border-box;"></div>
+        <div style="width:${sz}px;height:${sz}px;background:${poleFill};border:2px solid ${hasClosure ? '#1565c0' : 'white'};border-radius:${radius};box-shadow:0 1px 3px rgba(0,0,0,.3);opacity:${dimmed ? 0.3 : _poleFocusDim ? 0.12 : 1};box-sizing:border-box;"></div>
+        ${_pStatusDot}
         ${countBadge}
         <div class="pole-label">${h(p.name)}</div>
       </div>`,
@@ -2582,6 +3651,34 @@ function renderMap() {
       });
     }
     state.poleMarkers[p.id] = marker;
+    if (!dimmed) marker.on('contextmenu', (e) => {
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e.originalEvent);
+      const pt = map.latLngToContainerPoint(e.latlng);
+      const [pLng, pLat] = p.geom.coordinates;
+      const mapsUrl = `https://maps.google.com/maps?q=${pLat.toFixed(6)},${pLng.toFixed(6)}`;
+      const svUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${pLat.toFixed(6)},${pLng.toFixed(6)}`;
+      showElemCtxMenu(pt, [
+        { label: '✏ Edit', action: () => openEditModal('pole', p.id, p) },
+        { label: '🎯 Zoom to', action: () => map.flyTo([pLat, pLng], Math.max(map.getZoom(), 17), {animate:true,duration:.7}) },
+        { label: '📍 Open in Maps', action: () => window.open(mapsUrl,'_blank') },
+        { label: '🚶 Street View', action: () => window.open(svUrl,'_blank') },
+        null,
+        { label: isPed ? '🗑 Delete pedestal' : '🗑 Delete pole', danger: true, action: async () => {
+          if (!confirm(`Delete ${isPed ? 'pedestal' : 'pole'} "${p.name}"?`)) return;
+          await api('DELETE', '/poles/' + p.id);
+          state.poles = state.poles.filter(x => x.id !== p.id);
+          if (isPed) {
+            const pedClosures = state.closures.filter(c => c.pole_id === p.id);
+            for (const c of pedClosures) { await api('DELETE', '/closures/' + c.id); }
+            state.closures = state.closures.filter(c => c.pole_id !== p.id);
+          } else {
+            state.closures.forEach(c => { if (c.pole_id === p.id) c.pole_id = null; });
+          }
+          renderMap(); showToast(`Deleted ${isPed ? 'pedestal' : 'pole'} ${p.name}`, 'warn');
+        }}
+      ]);
+    });
   });
 
   // Render routes
@@ -2595,7 +3692,8 @@ function renderMap() {
       _traceHalos.push(L.polyline(coords, { color: '#ffeb3b', weight: 12, opacity: 0.9 }).addTo(map));
     }
     const lineColor = isPlan ? (r.color && r.color !== '#FF8800' ? r.color : '#7E57C2') : (r.color || '#FF8800');
-    const style = { color: lineColor, weight: 4, opacity: dimmed ? 0.3 : 0.85 };
+    const _routeFocusDim = _focusRouteId && r.id !== _focusRouteId;
+    const style = { color: lineColor, weight: 4, opacity: dimmed ? 0.3 : _routeFocusDim ? 0.08 : 0.85 };
     if (r.buried) style.dashArray = '7,7';        // dashed = buried (plan is shown via colour + dim, no dash)
     const line = L.polyline(coords, style).addTo(map);
     const fcLabel = r.fiber_count ? ` (${r.fiber_count}F)` : '';
@@ -2610,7 +3708,14 @@ function renderMap() {
         // through to the map so closures/poles can be dropped on top of a route.
         if (state.mode === 'select') {
           L.DomEvent.stopPropagation(e);
-          openViewModal('route', r.id, state.routes.find(x => x.id === r.id));
+          const _rNow = Date.now();
+          const _rObj = state.routes.find(x => x.id === r.id);
+          if (_lastElemClick.type === 'route' && _lastElemClick.id === r.id && _rNow - _lastElemClick.time < 350) {
+            _lastElemClick = { type: null, id: null, time: 0 };
+            openEditModal('route', r.id, _rObj); return;
+          }
+          _lastElemClick = { type: 'route', id: r.id, time: _rNow };
+          openViewModal('route', r.id, _rObj);
         } else if (state.mode === 'edit') {
           L.DomEvent.stopPropagation(e);
           if (state.editingRouteId === r.id) { clearEditHandles(); } else { startEditRoute(r.id); }
@@ -2620,6 +3725,15 @@ function renderMap() {
       hit.on('click', onRouteClick);
     }
     state.routeLayers[r.id] = line;
+    // Route name label at midpoint (shown at zoom >= ROUTE_LABEL_ZOOM)
+    if (coords.length >= 2) {
+      const mid = coords[Math.floor(coords.length / 2)];
+      const lbl = L.marker([mid[1], mid[0]], {
+        icon: L.divIcon({ className: 'route-label', html: h(r.name), iconAnchor: [0, 0] }),
+        interactive: false, zIndexOffset: -10
+      }).addTo(map);
+      state.routeLayers['lbl_' + r.id] = lbl;
+    }
   });
 
   // Render sites
@@ -2894,6 +4008,14 @@ async function openEditModal(entityType, entityId, obj) {
     <label>Name</label><input id="ef-name" value="${h(obj.name || '')}">
     <label>Notes</label><textarea id="ef-notes" rows="2">${h(obj.notes || '')}</textarea>
   `;
+  if (entityType === 'pole' || entityType === 'closure') {
+    const _ost = obj.status || 'active';
+    standardFields += `<label>Status</label><select id="ef-status">
+      <option value="active"             ${_ost==='active'?'selected':''}>Active</option>
+      <option value="under_construction" ${_ost==='under_construction'?'selected':''}>Under Construction</option>
+      <option value="decommissioned"     ${_ost==='decommissioned'?'selected':''}>Decommissioned</option>
+    </select>`;
+  }
   if (entityType === 'route') {
     standardFields += obj.is_plan
       ? `<div style="font-size:11px;color:#7E57C2;margin:4px 0 6px;">🧭 Plan fiber — fiber count is assigned when promoted to the live network.</div>
@@ -2947,10 +4069,12 @@ async function openEditModal(entityType, entityId, obj) {
       const notes = document.getElementById('ef-notes').value.trim();
 
       if (entityType === 'closure') {
-        const updated = await api('PUT', `/closures/${entityId}`, { name, notes, lat: obj.geom.coordinates[1], lng: obj.geom.coordinates[0] });
+        const _efst = document.getElementById('ef-status')?.value||'active';
+        const updated = await api('PUT', `/closures/${entityId}`, { name, notes, status: _efst, lat: obj.geom.coordinates[1], lng: obj.geom.coordinates[0] });
         Object.assign(obj, updated);
       } else if (entityType === 'pole') {
-        const updated = await api('PUT', `/poles/${entityId}`, { name, notes });
+        const _efpst = document.getElementById('ef-status')?.value||null;
+        const updated = await api('PUT', `/poles/${entityId}`, { name, notes, status: _efpst });
         Object.assign(obj, updated);
       } else if (entityType === 'route') {
         const fcEl = document.getElementById('ef-fc');
@@ -3009,6 +4133,14 @@ async function openViewModal(entityType, entityId, obj) {
     }
     rows += `<div class="view-row"><span class="view-label">Poles</span><span>${(obj.attached_poles || []).length}</span></div>`;
     rows += `<div class="view-row"><span class="view-label">Placement</span><span>${obj.buried ? 'Buried (underground)' : 'Aerial'}</span></div>`;
+    // Closures that use this route
+    const _routeClosures = state.closures.filter(cl => cl.cables?.some(cab => cab.route_id === entityId));
+    if (_routeClosures.length) {
+      const _clBtns = _routeClosures.map(cl =>
+        `<button class="pole-closure-open" data-id="${cl.id}" style="display:inline-block;margin:2px 3px 2px 0;padding:4px 9px;border:1px solid #e0e0e0;border-radius:5px;background:white;cursor:pointer;font-size:12px;">📦 ${h(cl.name)}</button>`
+      ).join('');
+      rows += `<div class="view-row"><span class="view-label">In closures</span><span>${_clBtns}</span></div>`;
+    }
   }
   if (obj.is_plan) {
     rows += `<div class="view-row"><span class="view-label">Status</span><span><span style="background:#7E57C2;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">PLAN</span></span></div>`;
@@ -3030,6 +4162,46 @@ async function openViewModal(entityType, entityId, obj) {
         <input type="file" accept="image/*" multiple style="display:none;" onchange="entityPhotoUpload(this,'${entityType}','${entityId}')">
       </label>
     </span></div>`;
+  }
+
+  // Status + last updated for poles and closures
+  if (entityType === 'pole' || entityType === 'closure') {
+    const _sl = STATUS_LABELS[obj.status] || 'Active';
+    const _sc = STATUS_COLORS[obj.status] || STATUS_COLORS.active;
+    rows += `<div class="view-row"><span class="view-label">Status</span><span style="display:inline-flex;align-items:center;gap:5px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:${_sc};display:inline-block;flex-shrink:0;"></span>${_sl}
+    </span></div>`;
+    if (obj.updated_at) {
+      rows += `<div class="view-row"><span class="view-label">Last updated</span><span style="color:#888;font-size:12px;">${relativeTime(obj.updated_at)}</span></div>`;
+    }
+  }
+
+  // QR code for field scanning (pole & closure). Rendered server-side at /api/qr.
+  if (entityType === 'pole' || entityType === 'closure') {
+    const _qrBase = `${location.origin}${location.pathname}`;
+    const _qrUrl = obj.geom
+      ? `${_qrBase}?lat=${obj.geom.coordinates[1].toFixed(5)}&lng=${obj.geom.coordinates[0].toFixed(5)}&zoom=18`
+      : _qrBase;
+    const _qrSrc = `/api/qr?size=160&data=${encodeURIComponent(_qrUrl)}`;
+    rows += `<div class="view-row"><span class="view-label">QR code</span><span style="display:flex;align-items:center;gap:10px;">
+      <img src="${_qrSrc}" width="80" height="80" style="border-radius:4px;border:1px solid #e0e0e0;" title="Scan to open map at this location" loading="lazy">
+      <span style="font-size:11px;color:#888;">Scan to open<br>on mobile</span>
+    </span></div>`;
+  }
+
+  if (entityType === 'pole' && obj.geom) {
+    const [_lng, _lat] = obj.geom.coordinates;
+    const _coordStr = `${_lat.toFixed(6)}, ${_lng.toFixed(6)}`;
+    const _mapsUrl = `https://maps.google.com/maps?q=${_lat.toFixed(6)},${_lng.toFixed(6)}`;
+    rows += `<div class="view-row"><span class="view-label">Coordinates</span><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">`
+      + `<code style="font-size:11px;background:#f5f5f7;padding:2px 5px;border-radius:3px;">${_coordStr}</code>`
+      + `<button onclick="navigator.clipboard.writeText('${_coordStr}').then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='Copy',1500)}).catch(()=>{})" `
+      + `style="font-size:11px;padding:2px 7px;border:1px solid #ccc;border-radius:3px;cursor:pointer;background:white;">Copy</button>`
+      + `<a href="${_mapsUrl}" target="_blank" rel="noopener" `
+      + `style="font-size:11px;padding:2px 7px;border:1px solid #1a73e8;border-radius:3px;cursor:pointer;background:#1a73e8;color:white;text-decoration:none;">📍 Maps</a>`
+      + `<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat.toFixed(6)},${_lng.toFixed(6)}" target="_blank" rel="noopener" `
+      + `style="font-size:11px;padding:2px 7px;border:1px solid #34a853;border-radius:3px;cursor:pointer;background:#34a853;color:white;text-decoration:none;">🚶 Street View</a>`
+      + `</span></div>`;
   }
 
   if (entityType === 'pole') {
@@ -3056,6 +4228,9 @@ async function openViewModal(entityType, entityId, obj) {
     <div style="display:flex;align-items:center;gap:8px;">
       ${deleteBtn}
       ${promoteBtn}
+      <button id="view-zoom-btn" style="padding:8px 12px;font-size:13px;border-radius:5px;cursor:pointer;border:1px solid #ccc;background:white;" title="Pan & zoom map to this element">🎯 Zoom to</button>
+      ${entityType === 'route' ? `<button id="view-focus-btn" style="padding:8px 12px;font-size:13px;border-radius:5px;cursor:pointer;border:1px solid #0891b2;background:white;color:#0891b2;" title="Focus map on this route — dims everything else">🔍 Focus</button>
+      <button id="view-copy-summary-btn" style="padding:8px 12px;font-size:13px;border-radius:5px;cursor:pointer;border:1px solid #ccc;background:white;" title="Copy a text summary of this route to clipboard">📋 Copy summary</button>` : ''}
       <button id="view-close-btn" style="margin-left:auto;padding:8px 16px;font-size:13px;border-radius:5px;cursor:pointer;border:1px solid #ccc;background:white;">Close</button>
       <button class="btn-primary" id="view-edit-btn">Edit</button>
     </div>
@@ -3064,6 +4239,13 @@ async function openViewModal(entityType, entityId, obj) {
   bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
   document.getElementById('view-close-btn').onclick = () => bg.remove();
   document.getElementById('view-edit-btn').onclick = () => { bg.remove(); openEditModal(entityType, entityId, obj); };
+  document.getElementById('view-zoom-btn').onclick = () => { zoomToEntity(obj); bg.remove(); };
+  if (entityType === 'route') {
+    const fb = document.getElementById('view-focus-btn');
+    if (fb) fb.onclick = () => { bg.remove(); focusRoute(entityId, obj.name); };
+    const csb = document.getElementById('view-copy-summary-btn');
+    if (csb) csb.onclick = () => { bg.remove(); copyRouteSummary(entityId, obj); };
+  }
   bg.querySelectorAll('.pole-closure-open').forEach(btn => {
     btn.onclick = () => { bg.remove(); openClosurePanel(parseInt(btn.dataset.id)); };
   });
@@ -3106,14 +4288,19 @@ async function openViewModal(entityType, entityId, obj) {
   }
 }
 
+let _lastElemClick = { type: null, id: null, time: 0 };
 function handlePoleClick(poleId) {
   const pole = state.poles.find(p => p.id === poleId);
-  // A pedestal is essentially a closure on a structure — jump straight to its
-  // splice panel. Otherwise open the pole detail card (which lists any closures).
   if (pole && pole.structure_type === 'pedestal') {
     const cls = state.closures.filter(c => c.pole_id === poleId);
     if (cls.length === 1) { openClosurePanel(cls[0].id); return; }
   }
+  const now = Date.now();
+  if (_lastElemClick.type === 'pole' && _lastElemClick.id === poleId && now - _lastElemClick.time < 350) {
+    _lastElemClick = { type: null, id: null, time: 0 };
+    openEditModal('pole', poleId, pole); return;
+  }
+  _lastElemClick = { type: 'pole', id: poleId, time: now };
   openViewModal('pole', poleId, pole);
 }
 
@@ -3178,6 +4365,8 @@ function promptCreateClosure(latlng, snappedRouteId, snappedPoleId) {
     const c = await api('POST', '/closures', { name, notes, lat: latlng.lat, lng: latlng.lng, pole_id: snappedPoleId, layer_id: state.activeLayerId });
     c.cables = [];
     state.closures.push(c);
+    _undoStack.push({type:'closure',id:c.id}); updateUndoHint();
+    showToast(`✓ Closure ${c.name} added`, 'ok');
     if (snappedRouteId) {
       const route = state.routes.find(r => r.id === snappedRouteId);
       if (route) {
@@ -3242,9 +4431,11 @@ function promptCreatePole(latlng) {
     if (!name) return false;
     const p = await api('POST', '/poles', { name, lat: latlng.lat, lng: latlng.lng, layer_id: state.activeLayerId, is_plan: state.planMode });
     state.poles.push(p);
+    _undoStack.push({type:'pole',id:p.id}); updateUndoHint();
     await saveOnCreateFields('pole', p.id);
     renderMap();
     setMode('select');
+    showToast(`✓ Pole ${p.name} added`, 'ok');
     return true;
   });
 }
@@ -3252,10 +4443,14 @@ function promptCreatePole(latlng) {
 // A pedestal is a pole (structure_type=pedestal) that carries a closure. In live
 // mode we also auto-create the closure on it; in plan mode the closure is added
 // when the pedestal is built live (closures aren't plan objects).
-function promptCreatePed(latlng) {
+function promptCreatePed(latlng, snappedRouteId) {
   const n = state.poles.filter(p => p.structure_type === 'pedestal').length + 1;
+  const routeNote = snappedRouteId
+    ? `<div style="font-size:11px;color:#2e7d32;margin-top:8px;">📡 Snapped to fiber — IN and OUT cables will be auto-created.</div>`
+    : '';
   showModal('Add Pedestal', `
     <label>Name</label><input id="m-name" value="PED-${n}">
+    ${routeNote}
     ${buildOnCreateHtml('pole')}
   `, async () => {
     const name = document.getElementById('m-name').value.trim();
@@ -3267,6 +4462,19 @@ function promptCreatePed(latlng) {
       const c = await api('POST', '/closures', { name, lat: latlng.lat, lng: latlng.lng, pole_id: p.id, layer_id: state.activeLayerId });
       c.geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
       if (!c.cables) c.cables = [];
+      if (snappedRouteId) {
+        const route = state.routes.find(r => r.id === snappedRouteId);
+        if (route) {
+          const inCable = await api('POST', `/closures/${c.id}/cables`, { name: `${route.name} ↓`, fiber_count: route.fiber_count, direction: 'IN', route_id: route.id });
+          const outCable = await api('POST', `/closures/${c.id}/cables`, { name: `${route.name} ↑`, fiber_count: route.fiber_count, direction: 'OUT', route_id: route.id });
+          c.cables.push(inCable, outCable);
+          if (!route.attached_poles) route.attached_poles = [];
+          if (!route.attached_poles.includes(p.id)) {
+            route.attached_poles.push(p.id);
+            await api('PUT', '/routes/' + route.id, { name: route.name, notes: route.notes, fiber_count: route.fiber_count, color: route.color, attached_poles: route.attached_poles, points: route.geom.coordinates.map(([lng,lat]) => [lat,lng]) });
+          }
+        }
+      }
       state.closures.push(c);
     }
     renderMap();
@@ -3383,6 +4591,8 @@ function promptCreateRoute(points, tempLine, snapClosures, snapSites) {
     const r = await api('POST', '/routes', { name, notes: notes || null, fiber_count: fiberCount, color, buried, attached_poles: attachedAtDraw, points: lnglat, attached_sites: attachedSites, layer_id: state.activeLayerId, is_plan: state.planMode });
     state.drawAttachedPoles = [];
     state.routes.push(r);
+    _undoStack.push({type:'route',id:r.id}); updateUndoHint();
+    showToast(`✓ Fiber route added`, 'ok');
 
     // Auto-create cables in snapped closures
     const startClosureId = snapClosuresCopy[0] ?? null;
@@ -3473,6 +4683,7 @@ function showModal(title, bodyHtml, onConfirm, onCancel) {
 
 // ============ SIDE PANEL (SPLICES) ============
 async function openClosurePanel(closureId) {
+  _spliceUndoStack = [];  // reset undo history for the new closure
   const closure = state.closures.find(c => c.id === closureId);
   if (!closure) return;
   // Load cables and splices
@@ -3591,6 +4802,7 @@ function renderPanel() {
         <div class="meta">${c.cables.length} cable(s) · ${c.splices.length} splice(s)${(c.splitters && c.splitters.length) ? ` · ${c.splitters.length} splitter(s)` : ''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:4px;">
+        <button class="icon-btn" title="Print splice sheet" style="font-size:15px;" onclick="printSpliceSheet(${c.id})">🖨</button>
         ${c.pole_id ? `<button class="icon-btn" title="View pole" style="font-size:15px;" onclick="openViewModal('pole',${c.pole_id},state.poles.find(p=>p.id===${c.pole_id}))">📍</button>` : ''}
         <button class="icon-btn" title="Edit closure" style="font-size:16px;" onclick="openEditModal('closure',${c.id},state.closures.find(x=>x.id===${c.id}))">✏️</button>
         <button class="close-btn" title="Close panel" onclick="closePanel()">×</button>
@@ -3670,6 +4882,9 @@ function renderPanel() {
   </div>`;
   html += `<div class="sd-toolrow">Tools:
     <button class="sd-typebtn sd-delbtn ${state.spliceDeleteMode ? 'active' : ''}" onclick="toggleSpliceDeleteMode()" title="Click fibers (or splitter ports) to break their connections">✂ Break splices</button>
+    <button class="sd-typebtn" onclick="autoThroughConnect()" title="Auto-connect IN cable fibers to OUT cable fiber-for-fiber (F1→F1, F2→F2…)">⇌ Through-connect</button>
+    <button class="sd-typebtn" onclick="findUnconnectedInClosure()" title="Jump to next fiber with no splice">⚡ Find unconnected</button>
+    <button class="sd-typebtn" id="splice-undo-btn" onclick="undoLastSplice()" title="Nothing to undo" style="opacity:.4;" disabled>↩ Undo</button>
   </div>`;
   html += renderSpliceDiagram(c, sel, connSet, connectedSet, splitterFiberSet);
 
@@ -3774,7 +4989,9 @@ function renderPanel() {
         ${glyph}
         <span class="fiber-dot" style="background:${tFc.bg};border:1.5px solid ${tFc.border};width:10px;height:10px;"></span>
         <span>${h(tC?.name || '?')} F${s.to_fiber + 1}</span>
-        <button class="type-btn" onclick="toggleSpliceType(${s.id})" title="Toggle fusion / glass-through" style="margin-left:auto;">⇄</button>
+        ${(() => { const _tc=c.cables.find(cb=>cb.id===s.from_cable_id); return _tc?.route_id?`<button class="icon-btn" onclick="event.stopPropagation();traceStrand(${_tc.route_id},${s.from_fiber})" title="Trace this fiber end-to-end across the network" style="font-size:11px;opacity:.7;">🔍</button>`:''; })()}
+        ${s.notes ? `<span title="${h(s.notes)}" style="font-size:13px;cursor:pointer;" onclick="event.stopPropagation();editSpliceNotes(${s.id})">💬</span>` : `<button class="icon-btn" onclick="event.stopPropagation();editSpliceNotes(${s.id})" title="Add note to this splice" style="opacity:.4;font-size:12px;">💬</button>`}
+        <button class="type-btn" onclick="toggleSpliceType(${s.id})" title="Toggle fusion / glass-through">⇄</button>
         <button class="del-btn" onclick="deleteSplice(${s.id})" title="Remove" style="margin-left:0;">🗑</button>
       </div>`;
     });
@@ -3858,10 +5075,13 @@ function renderCableBox(cable, side, c, sel, connSet, connectedSet, splitterFibe
       })()
     : `<span class="dir-badge dir-${h(cable.direction)}">${h(cable.direction)}</span>`;
   const sideBtn = `<button class="sd-side-btn" title="Move to other side" onclick="event.stopPropagation();toggleCableSide(${cable.id})">${side === 'L' ? '▶' : '◀'}</button>`;
+  const _usedCount = [...connectedSet].filter(k => k.startsWith(cable.id + '-')).length;
+  const _utilColor = _usedCount === 0 ? '#9e9e9e' : _usedCount >= cable.fiber_count ? '#c62828' : '#2e7d32';
+  const _utilBadge = `<span style="font-size:10px;padding:1px 5px;border-radius:8px;margin-left:3px;color:${_utilColor};font-weight:600;">(${_usedCount}/${cable.fiber_count})</span>`;
   let html = `<div class="cable">
     <div class="cable-hdr" onclick="toggleCable(${cable.id})">
-      <span>${chevron} ${h(cable.name)} · ${cable.fiber_count}F · ${dirBadge}</span>
-      <span style="display:flex;gap:4px;align-items:center;">${sideBtn}<button class="icon-btn" onclick="event.stopPropagation();deleteCable(${cable.id})" title="Delete">🗑</button></span>
+      <span>${chevron} ${h(cable.name)} · ${cable.fiber_count}F${_utilBadge} · ${dirBadge}</span>
+      <span style="display:flex;gap:4px;align-items:center;">${cable.route_id ? `<button class="icon-btn" onclick="event.stopPropagation();highlightCableRoute(${cable.route_id},'${h(cable.name)}')" title="Show route on map">🗺</button>` : ''}${sideBtn}<button class="icon-btn" onclick="event.stopPropagation();deleteCable(${cable.id})" title="Delete">🗑</button></span>
       <span class="sd-port" id="cablehdrport-${cable.id}" data-side="${side}"></span>
     </div>`;
   if (isExpanded) {
@@ -4443,7 +5663,19 @@ async function maybeAutoConnect() {
       splice_type: state.spliceType
     }).then(sp => c.splices.push(sp)).catch(() => { skipped++; }));
   }
-  try { await Promise.all(jobs); } catch (_) {}
+  const _newSplices = [];
+  try {
+    const results = await Promise.all(jobs);
+    // jobs are promises that resolve to nothing (they call c.splices.push inline)
+    // collect newly pushed splices: the last `n - skipped` entries in c.splices
+    const totalNow = c.splices.length;
+    const justAdded = c.splices.slice(totalNow - (n - skipped));
+    justAdded.forEach(sp => _newSplices.push(sp.id));
+  } catch (_) {}
+  if (_newSplices.length) {
+    _spliceUndoStack.push({ ids: _newSplices, label: `${_newSplices.length} splice${_newSplices.length>1?'s':''}` });
+    updateSpliceUndoBtn();
+  }
   renderPanel();
   if (skipped) flashHint(`Connected ${n - skipped}, skipped ${skipped} (already spliced).`);
 }
@@ -4849,6 +6081,67 @@ function promptDeleteLayer(id) {
     return true;
   });
 }
+
+
+// ── Print splice sheet ────────────────────────────────────────────────────────
+function printSpliceSheet(closureId) {
+  const c = state.closures.find(x => x.id === closureId);
+  if (!c) return;
+  // Guard: cables and splices must be loaded (they load when the closure panel is opened)
+  if (!Array.isArray(c.cables) || !Array.isArray(c.splices)) {
+    showToast('Open the closure panel first to load its splice data, then print', 'warn');
+    return;
+  }
+  const FCOLORS = ['#2563eb','#e65100','#16a34a','#b91c1c','#7c3aed','#d97706','#0891b2','#be185d','#713f12','#14532d','#374151','#7c2d12'];
+  const FNAMES  = ['Blue','Orange','Green','Brown','Slate','White','Red','Black','Yellow','Violet','Rose','Aqua'];
+  const cables  = c.cables;
+  const splices = c.splices;
+
+  const cablesHtml = cables.map(cab => {
+    const rows = Array.from({length: cab.fiber_count}, (_, i) => {
+      const ci = i % 12;
+      // Use correct field names: from_cable_id / from_fiber / to_cable_id / to_fiber
+      const sp = splices.find(s =>
+        (s.from_cable_id === cab.id && s.from_fiber === i) ||
+        (s.to_cable_id   === cab.id && s.to_fiber   === i)
+      );
+      let connTo = '—';
+      if (sp) {
+        const isA = sp.from_cable_id === cab.id && sp.from_fiber === i;
+        const otherCabId = isA ? sp.to_cable_id : sp.from_cable_id;
+        const otherFi    = isA ? sp.to_fiber    : sp.from_fiber;
+        const otherCab   = cables.find(c2 => c2.id === otherCabId);
+        if (otherCab) connTo = `${otherCab.name} • F${otherFi + 1} ${FNAMES[otherFi % 12]}`;
+      }
+      return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${FCOLORS[ci]};margin-right:5px;vertical-align:middle;"></span>F${i+1} &ndash; ${FNAMES[ci]}</td><td>${connTo}</td><td>${sp ? (sp.splice_type || 'Fusion') : ''}</td></tr>`;
+    }).join('');
+    return `<h3 style="margin:18px 0 4px;font-size:13px;color:#1565c0;">${cab.name} &bull; ${cab.fiber_count}F &bull; ${cab.direction || ''}</h3>
+<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+  <thead><tr style="background:#e3f2fd;"><th style="text-align:left;padding:5px 8px;border-bottom:2px solid #1565c0;">Fiber</th><th style="text-align:left;padding:5px 8px;border-bottom:2px solid #1565c0;">Connected To</th><th style="text-align:left;padding:5px 8px;border-bottom:2px solid #1565c0;">Splice Type</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>`;
+  }).join('');
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Splice Sheet — ${c.name}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 28px; color: #111; font-size: 13px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: #666; font-size: 12px; margin-bottom: 20px; }
+  tbody tr:nth-child(even) { background: #f5f5f5; }
+  td, th { padding: 5px 8px; border-bottom: 1px solid #e0e0e0; }
+  .print-btn { float: right; padding: 7px 16px; background: #1565c0; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  @media print { .print-btn { display: none !important; } }
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨 Print</button>
+<h1>Splice Sheet: ${c.name}</h1>
+<div class="meta">${cables.length} cable(s) &bull; ${splices.length} splice(s) &bull; Generated ${new Date().toLocaleString()}</div>
+${cablesHtml || '<p style="color:#888;">No cables defined for this closure.</p>'}
+</body></html>`);
+  win.document.close();
+  win.focus();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ============ STARTUP ============
 checkSession();

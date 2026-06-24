@@ -794,6 +794,22 @@ app.delete('/api/photos/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Server error' }); }
 });
 
+// QR code generation (server-side; replaces the retired Google Chart QR API).
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch (_) { /* optional */ }
+app.get('/api/qr', requireAuth, async (req, res) => {
+  if (!QRCode) return res.status(500).json({ error: 'qrcode package not installed' });
+  const data = String(req.query.data || '').slice(0, 1024);
+  if (!data) return res.status(400).json({ error: 'data required' });
+  const size = Math.min(600, Math.max(60, parseInt(req.query.size, 10) || 200));
+  try {
+    const buf = await QRCode.toBuffer(data, { type: 'png', width: size, margin: 1, errorCorrectionLevel: 'M' });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: 'QR generation failed' }); }
+});
+
 app.get('/api/connector-types', requireAuth, async (req, res) => {
   try {
     const r = await pool.query('SELECT name, enabled FROM connector_types ORDER BY sort_order');
