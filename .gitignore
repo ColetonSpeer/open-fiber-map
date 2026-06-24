@@ -1,4 +1,13 @@
 backend/.env
 backend/node_modules/
+node_modules/
 *.log
 .claude/
+
+# iOS signing material — NEVER commit these
+*.p12
+*.mobileprovision
+*.p8
+*.cer
+*.certSigningRequest
+ios/App/export.plist

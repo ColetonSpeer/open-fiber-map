@@ -1,0 +1,20 @@
+{
+  "name": "open-fiber-map-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native (Capacitor) iOS wrapper for the Open Fiber Map web frontend",
+  "scripts": {
+    "icons": "node scripts/make-icons.js && capacitor-assets generate --ios",
+    "sync": "cap sync ios",
+    "open:ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/preferences": "^6.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.2.0"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "appId": "com.hky.openfibermap",
+  "appName": "Open Fiber Map",
+  "webDir": "frontend",
+  "server": {
+    "iosScheme": "capacitor"
+  },
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false
+  }
+}
