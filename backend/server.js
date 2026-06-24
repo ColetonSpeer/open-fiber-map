@@ -2320,6 +2320,29 @@ app.delete('/api/users/:id', requireAdmin, async (req, res) => {
   }
 });
 
+app.put('/api/users/:id/password', requireAdmin, async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    const { new_password, current_password } = req.body;
+    if (!new_password || String(new_password).length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    const u = await pool.query('SELECT id, password_hash FROM users WHERE id = $1', [targetId]);
+    if (!u.rows.length) return res.status(404).json({ error: 'User not found' });
+    // Changing your own password requires verifying the current one.
+    if (targetId === req.session.userId) {
+      const valid = current_password && await bcrypt.compare(current_password, u.rows[0].password_hash);
+      if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+    const hash = await bcrypt.hash(new_password, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, targetId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============ SITES ============
 
 app.get('/api/sites', requireAuth, async (req, res) => {

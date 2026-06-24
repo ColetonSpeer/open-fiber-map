@@ -417,10 +417,51 @@ async function renderUsers() {
         <td>${esc(u.username)}</td>
         <td>${esc(u.full_name || '—')}</td>
         <td>${esc(u.role)}</td>
-        <td>${u.id !== currentUserId ? `<button class="icon-btn" onclick="deleteUser(${u.id})">🗑</button>` : ''}</td>
+        <td style="white-space:nowrap;">
+          <button class="icon-btn" title="Change password" onclick="changeUserPassword(${u.id}, ${u.id === currentUserId})">🔑</button>
+          ${u.id !== currentUserId ? `<button class="icon-btn" title="Delete user" onclick="deleteUser(${u.id})">🗑</button>` : ''}
+        </td>
       </tr>`).join('')}</tbody>
     </table>`;
   } catch (err) { el.innerHTML = `<div style="color:red;">${esc(err.message)}</div>`; }
+}
+
+async function changeUserPassword(userId, isSelf) {
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  bg.innerHTML = `<div style="background:white;border-radius:8px;padding:24px;width:320px;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+    <h2 style="margin:0 0 16px;font-size:16px;">🔑 Change Password</h2>
+    ${isSelf ? `<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px;">Current password</label>
+    <input id="pw-cur" type="password" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px;border:1px solid #ccc;border-radius:5px;font-size:13px;">` : ''}
+    <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px;">New password</label>
+    <input id="pw-new" type="password" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
+    <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px;">Confirm new password</label>
+    <input id="pw-con" type="password" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:8px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
+    <div id="pw-err" style="color:#c62828;font-size:12px;margin-bottom:8px;display:none;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="pw-cancel" style="padding:7px 14px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:white;">Cancel</button>
+      <button id="pw-save" style="padding:7px 16px;background:#1565c0;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;">Save</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.addEventListener('click', e => { if (e.target === bg) close(); });
+  document.getElementById('pw-cancel').onclick = close;
+  document.getElementById('pw-save').onclick = async () => {
+    const np = document.getElementById('pw-new').value;
+    const cp = document.getElementById('pw-con').value;
+    const errEl = document.getElementById('pw-err');
+    const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+    if (np.length < 6) return showErr('Password must be at least 6 characters');
+    if (np !== cp) return showErr('Passwords do not match');
+    const body = { new_password: np };
+    if (isSelf) body.current_password = document.getElementById('pw-cur').value;
+    try {
+      await api('PUT', `/users/${userId}/password`, body);
+      close();
+      alert('Password changed successfully.');
+    } catch (e) { showErr(e.message || 'Failed to change password'); }
+  };
 }
 
 async function addUser() {
