@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Open Fiber Map</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f5f5f7; color: #1d1d1f; height: 100vh; overflow: hidden; }
@@ -20,6 +20,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 #login-box button { width: 100%; padding: 11px; font-size: 14px; background: #1a1a2e; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 20px; font-weight: 500; }
 #login-box button:hover { background: #2a2a3e; }
 #login-error { color: #c62828; font-size: 13px; margin-top: 10px; display: none; }
+#server-config { margin-top: 22px; border-top: 1px solid #eee; padding-top: 14px; }
+#server-toggle { font-size: 12px; color: #888; text-decoration: none; }
+#server-toggle:hover { color: #1a1a2e; }
+#server-toggle #server-current { font-weight: 600; color: #555; }
+#server-panel { display: none; margin-top: 12px; }
+#server-panel label { margin-top: 0; }
+#server-panel .server-btn-row { display: flex; gap: 8px; }
+#server-panel button { margin-top: 12px; font-size: 13px; padding: 9px; }
+#server-panel #server-test { background: #555; }
+#server-status { font-size: 12px; margin-top: 8px; min-height: 14px; }
+body.dark-mode #login-box { background: #1c2128; }
+body.dark-mode #login-box h1 { color: #e6edf3; }
+body.dark-mode #login-box input { background: #0d1117; border-color: #30363d; color: #e6edf3; }
 
 /* Main app */
 #app { display: none; flex-direction: column; height: 100vh; }
@@ -407,10 +420,11 @@ body.dark-mode .dir-OUT { background: #163a26; color: #86efac; }
 body.dark-mode .form-card .btn-row button { background: #374151; border-color: #4b5563; color: #d1d5db; }
 body.dark-mode .sel-bar button { color: #93c5fd; }
 </style>
-<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
 </head>
 <body>
 <script>if(localStorage.getItem('ofm-dark-mode')==='true')document.body.classList.add('dark-mode');</script>
+<script src="api.js"></script>
 
 <!-- Login Screen -->
 <div id="login-screen">
@@ -425,6 +439,18 @@ body.dark-mode .sel-bar button { color: #93c5fd; }
       <button type="submit">Sign In</button>
       <div id="login-error"></div>
     </form>
+    <div id="server-config">
+      <a href="#" id="server-toggle">⚙ Server: <span id="server-current">this device</span></a>
+      <div id="server-panel">
+        <label for="server-url">Server URL</label>
+        <input type="url" id="server-url" placeholder="http://10.10.11.4" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <div class="server-btn-row">
+          <button type="button" id="server-test">Test connection</button>
+          <button type="button" id="server-save">Save</button>
+        </div>
+        <div id="server-status"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -548,7 +574,7 @@ body.dark-mode .sel-bar button { color: #93c5fd; }
   </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
 <script>
 // ============ HTML ESCAPING ============
 function h(s) {
@@ -636,9 +662,9 @@ let splitterAssign = null;
 
 // ============ API HELPERS ============
 async function api(method, path, body) {
-  const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } };
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch('/api' + path, opts);
+  const r = await apiRequest('/api' + path, opts);
   if (r.status === 401) {
     showLogin();
     throw new Error('Not authenticated');
@@ -676,8 +702,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
   try {
-    const r = await fetch('/api/login', {
-      method: 'POST', credentials: 'include',
+    const r = await apiRequest('/api/login', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
@@ -688,6 +714,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
       return;
     }
     const user = await r.json();
+    if (user.token) OFM_API.setToken(user.token);
     state.user = user;
     document.getElementById('user-info').textContent = user.username;
     if (user.role === 'admin') document.getElementById('admin-btn').style.display = 'inline-block';
@@ -721,13 +748,69 @@ function applyRoleUi() {
 }
 
 async function logout() {
-  await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+  await apiRequest('/api/logout', { method: 'POST' });
+  OFM_API.clearToken();
   location.reload();
+}
+
+// True when running inside the native (Capacitor) shell rather than a browser
+// served same-origin by the backend.
+function isNativeShell() {
+  try {
+    if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) return true;
+  } catch (_) {}
+  return location.protocol === 'capacitor:' || location.protocol === 'file:';
+}
+
+// Server URL configuration on the login screen. Lets the native app point at a
+// backend (LAN IP now, VPN/public URL later). No-op for the same-origin web app.
+function initServerConfig() {
+  const toggle = document.getElementById('server-toggle');
+  const panel = document.getElementById('server-panel');
+  const urlInput = document.getElementById('server-url');
+  const currentEl = document.getElementById('server-current');
+  const statusEl = document.getElementById('server-status');
+  if (!toggle) return;
+  function refresh() {
+    const b = OFM_API.getBase();
+    currentEl.textContent = b || 'this device';
+    urlInput.value = b;
+  }
+  refresh();
+  toggle.addEventListener('click', e => {
+    e.preventDefault();
+    panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+  });
+  document.getElementById('server-save').addEventListener('click', () => {
+    const v = urlInput.value.trim();
+    OFM_API.setBase(v);
+    OFM_API.clearToken(); // switching servers invalidates any old token
+    refresh();
+    statusEl.style.color = '#2e7d32';
+    statusEl.textContent = v ? 'Saved. Sign in to connect.' : 'Cleared — using this device.';
+  });
+  document.getElementById('server-test').addEventListener('click', async () => {
+    const v = urlInput.value.trim().replace(/\/+$/, '');
+    statusEl.style.color = '#888';
+    statusEl.textContent = 'Testing…';
+    try {
+      // Any HTTP response (even 401) proves the server is reachable.
+      const r = await fetch((v || '') + '/api/me', { credentials: v ? 'omit' : 'include' });
+      statusEl.style.color = '#2e7d32';
+      statusEl.textContent = '✓ Reachable (HTTP ' + r.status + ')';
+    } catch (_) {
+      statusEl.style.color = '#c62828';
+      statusEl.textContent = '✗ Could not reach server. Check the URL and network.';
+    }
+  });
+  // In the native app with no server set yet, open the panel so the field tech
+  // is prompted to enter the server address.
+  if (isNativeShell() && !OFM_API.getBase()) panel.style.display = 'block';
 }
 
 async function checkSession() {
   try {
-    const r = await fetch('/api/me', { credentials: 'include' });
+    const r = await apiRequest('/api/me');
     if (r.ok) {
       const user = await r.json();
       state.user = user;
@@ -1789,7 +1872,7 @@ async function exportKMZ() {
     async function gatherPhoto(url) {
       if (!url || photoFiles.has(url)) return;
       try {
-        const r = await fetch(url, { credentials: 'include' });
+        const r = await fetch(apiUrl(url), { credentials: OFM_API.getBase() ? 'omit' : 'include' });
         if (r.ok) photoFiles.set(url, await r.blob());
       } catch (e) { /* skip missing photos */ }
     }
@@ -2243,15 +2326,15 @@ async function startImport(btn) {
     try {
       if (/^https?:\/\//i.test(photoSrc)) {
         // External URL (e.g. Google My Maps hosted image) — proxy through server then save to entity_photos
-        const res = await fetch('/api/uploads/proxy', {
-          method: 'POST', credentials: 'include',
+        const res = await apiRequest('/api/uploads/proxy', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: photoSrc }),
         });
         if (!res.ok) { console.warn('[KMZ import] proxy failed, status:', res.status, await res.text()); return; }
         const { url } = await res.json();
-        await fetch(`/api/photos/${entityType}/${entityId}/url`, {
-          method: 'POST', credentials: 'include',
+        await apiRequest(`/api/photos/${entityType}/${entityId}/url`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url }),
         });
@@ -2276,7 +2359,7 @@ async function startImport(btn) {
         const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
         const fd = new FormData();
         fd.append('file', new File([blob], base, { type: mimeMap[ext] || 'image/jpeg' }));
-        const res = await fetch(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd, credentials: 'include' });
+        const res = await apiRequest(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd });
         if (!res.ok) { console.warn('[KMZ import] upload failed, status:', res.status); return; }
         const photo = await res.json();
         console.log('[KMZ import] photo saved:', photo.url, '->', entityType, entityId);
@@ -3357,7 +3440,7 @@ async function startSync() {
 
   // SSE for instant push (works when proxy supports streaming)
   if (_eventSource) { _eventSource.close(); _eventSource = null; }
-  _eventSource = new EventSource('/api/events');
+  _eventSource = apiEventSource('/api/events');
   _eventSource.onmessage = (e) => {
     try {
       const { table } = JSON.parse(e.data);
@@ -3791,7 +3874,7 @@ async function showFiberInfo(route) {
       customHtml += `<label>${h(d.field_label)}</label><select data-def="${d.id}"><option value=""></option>${opts}</select>`;
     } else if (d.field_type === 'photo') {
       const preview = val
-        ? `<img id="photo-preview-${d.id}" src="${h(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+        ? `<img id="photo-preview-${d.id}" src="${h(apiUrl(val))}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
         : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
       customHtml += `<label>${h(d.field_label)}</label>${preview}<input type="hidden" data-def="${d.id}" value="${h(val)}"><input type="file" accept="image/*" style="margin-bottom:6px;" onchange="uploadPhoto(this,'${d.id}')">`;
     } else {
@@ -3910,12 +3993,12 @@ async function uploadPhoto(input, defId) {
   const fd = new FormData();
   fd.append('file', file);
   try {
-    const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+    const res = await apiRequest('/api/uploads', { method: 'POST', body: fd });
     const { url } = await res.json();
     const hidden = document.querySelector(`input[type=hidden][data-def="${defId}"]`);
     if (hidden) hidden.value = url;
     const img = document.getElementById('photo-preview-' + defId);
-    if (img) { img.src = url; img.style.display = 'block'; }
+    if (img) { img.src = apiUrl(url); img.style.display = 'block'; }
   } catch (e) { alert('Photo upload failed'); }
 }
 
@@ -3934,9 +4017,9 @@ function openPhotoLightbox(url) {
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closePhotoLightbox(); });
     document.body.appendChild(lb);
   }
-  lb.querySelector('#photo-lightbox-img').src = url;
+  lb.querySelector('#photo-lightbox-img').src = apiUrl(url);
   const dl = lb.querySelector('#photo-lightbox-dl');
-  dl.href = url;
+  dl.href = apiUrl(url);
   dl.download = url.split('/').pop();
   lb.style.display = 'flex';
 }
@@ -3947,7 +4030,7 @@ function closePhotoLightbox() {
 
 function entityPhotoThumbHtml(p) {
   return `<div id="ephoto-${p.id}" style="position:relative;display:inline-block;">
-    <img src="${h(p.url)}" title="${h(p.caption||'')}" onclick="openPhotoLightbox('${h(p.url)}')" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;cursor:zoom-in;">
+    <img src="${h(apiUrl(p.url))}" title="${h(p.caption||'')}" onclick="openPhotoLightbox('${h(p.url)}')" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;cursor:zoom-in;">
     <button onclick="entityPhotoDelete(${p.id})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:18px;padding:0;text-align:center;">×</button>
   </div>`;
 }
@@ -3983,7 +4066,7 @@ async function entityPhotoUpload(input, entityType, entityId) {
     const fd = new FormData();
     fd.append('file', file);
     try {
-      const res = await fetch(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd, credentials: 'include' });
+      const res = await apiRequest(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error(await res.text());
       const photo = await res.json();
       if (grid) grid.insertAdjacentHTML('beforeend', entityPhotoThumbHtml(photo));
@@ -4043,7 +4126,7 @@ async function openEditModal(entityType, entityId, obj) {
       customHtml += `<label>${h(d.field_label)}</label><select data-def="${d.id}"><option value=""></option>${opts}</select>`;
     } else if (d.field_type === 'photo') {
       const preview = val
-        ? `<img id="photo-preview-${d.id}" src="${h(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+        ? `<img id="photo-preview-${d.id}" src="${h(apiUrl(val))}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
         : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
       customHtml += `<label>${h(d.field_label)}</label>${preview}<input type="hidden" data-def="${d.id}" value="${h(val)}"><input type="file" accept="image/*" style="margin-bottom:6px;" onchange="uploadPhoto(this,'${d.id}')">`;
     } else {
@@ -4148,7 +4231,7 @@ async function openViewModal(entityType, entityId, obj) {
   defs.forEach(d => {
     const val = valMap[d.id] || '';
     if (d.field_type === 'photo') {
-      rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? `<img src="${h(val)}" onclick="openPhotoLightbox('${h(val)}')" style="max-width:120px;max-height:90px;border-radius:4px;cursor:zoom-in;">` : '<em style="color:#999">—</em>'}</span></div>`;
+      rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? `<img src="${h(apiUrl(val))}" onclick="openPhotoLightbox('${h(val)}')" style="max-width:120px;max-height:90px;border-radius:4px;cursor:zoom-in;">` : '<em style="color:#999">—</em>'}</span></div>`;
     } else {
       rows += `<div class="view-row"><span class="view-label">${h(d.field_label)}</span><span>${val ? h(val) : '<em style="color:#999">—</em>'}</span></div>`;
     }
@@ -4182,7 +4265,7 @@ async function openViewModal(entityType, entityId, obj) {
     const _qrUrl = obj.geom
       ? `${_qrBase}?lat=${obj.geom.coordinates[1].toFixed(5)}&lng=${obj.geom.coordinates[0].toFixed(5)}&zoom=18`
       : _qrBase;
-    const _qrSrc = `/api/qr?size=160&data=${encodeURIComponent(_qrUrl)}`;
+    const _qrSrc = apiUrl(`/api/qr?size=160&data=${encodeURIComponent(_qrUrl)}`);
     rows += `<div class="view-row"><span class="view-label">QR code</span><span style="display:flex;align-items:center;gap:10px;">
       <img src="${_qrSrc}" width="80" height="80" style="border-radius:4px;border:1px solid #e0e0e0;" title="Scan to open map at this location" loading="lazy">
       <span style="font-size:11px;color:#888;">Scan to open<br>on mobile</span>
@@ -4783,7 +4866,7 @@ function renderPanel() {
             for (const fv of c.fieldValues) {
               if (!fv.value) continue;
               const display = fv.field_type === 'photo'
-                ? `<img src="${h(fv.value)}" onclick="openPhotoLightbox('${h(fv.value)}')" style="max-width:80px;max-height:60px;border-radius:3px;vertical-align:middle;cursor:zoom-in;">`
+                ? `<img src="${h(apiUrl(fv.value))}" onclick="openPhotoLightbox('${h(fv.value)}')" style="max-width:80px;max-height:60px;border-radius:3px;vertical-align:middle;cursor:zoom-in;">`
                 : h(fv.value);
               mf += `<div class="panel-meta-field"><span class="panel-meta-label">${h(fv.field_label)}</span>${display}</div>`;
             }
@@ -6144,6 +6227,7 @@ ${cablesHtml || '<p style="color:#888;">No cables defined for this closure.</p>'
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ============ STARTUP ============
+initServerConfig();
 checkSession();
 </script>
 

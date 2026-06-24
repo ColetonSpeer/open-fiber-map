@@ -6,6 +6,8 @@ const express = require('express');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
 const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
@@ -13,6 +15,10 @@ const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Token signing secret for the native app (bearer auth). Falls back to the
+// session secret so a separate env var is optional.
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
 
 // Database connection pool
 const pool = new Pool({
@@ -75,6 +81,16 @@ setupDbListener();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// CORS — allows the native (Capacitor) app, which loads from its own origin
+// (capacitor://localhost / http://localhost), to call the API. Auth for those
+// requests is via bearer token (not cookies), so reflecting the origin without
+// credentials is safe. Same-origin web requests are unaffected.
+app.use(cors({
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 app.set('trust proxy', 1);
 
 // Session storage in PostgreSQL
@@ -94,6 +110,29 @@ app.use(session({
   }
 }));
 
+// Resolve the authenticated identity from EITHER the session cookie (web app)
+// OR a bearer token / ?token= query (native app). The result lives on req.auth
+// (NOT req.session) so token requests never create or persist a session row.
+// Runs before plannerGate and all route handlers.
+function attachAuth(req, res, next) {
+  if (req.session && req.session.userId) {
+    req.auth = { userId: req.session.userId, username: req.session.username, role: req.session.role };
+    return next();
+  }
+  const header = req.headers.authorization || '';
+  const m = /^Bearer\s+(.+)$/.exec(header);
+  const token = m ? m[1] : (req.query && req.query.token) || null;
+  req.auth = {};
+  if (token && JWT_SECRET) {
+    try {
+      const p = jwt.verify(token, JWT_SECRET);
+      req.auth = { userId: p.userId, username: p.username, role: p.role };
+    } catch (_) { /* invalid/expired token → treated as unauthenticated */ }
+  }
+  next();
+}
+app.use(attachAuth);
+
 // Static files (frontend)
 app.use(express.static(path.join(__dirname, '../frontend')));
 
@@ -111,14 +150,14 @@ const upload = multer({
 // ============ AUTH MIDDLEWARE ============
 
 function requireAuth(req, res, next) {
-  if (!req.session.userId) {
+  if (!req.auth.userId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.session.userId || req.session.role !== 'admin') {
+  if (!req.auth.userId || req.auth.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -137,7 +176,7 @@ const PLANNER_WRITE_WHITELIST = [
   /^\/api\/preferences$/,   // per-user map view prefs (basemap, zoom, dark mode)
 ];
 function plannerGate(req, res, next) {
-  if (req.session.role !== 'planner') return next();
+  if (req.auth.role !== 'planner') return next();
   if (req.method === 'GET') return next();
   if (req.path === '/api/logout' || req.path === '/api/login') return next();
   if (PLANNER_WRITE_WHITELIST.some(re => re.test(req.path))) return next();
@@ -147,7 +186,7 @@ app.use(plannerGate);
 
 // Returns false if a planner is trying to mutate a non-plan (live) row.
 async function assertPlanEditable(req, table, id) {
-  if (req.session.role !== 'planner') return true;
+  if (req.auth.role !== 'planner') return true;
   const safe = table === 'poles' ? 'poles' : 'routes';
   const r = await pool.query(`SELECT is_plan FROM ${safe} WHERE id=$1`, [id]);
   return r.rows[0]?.is_plan === true;
@@ -173,10 +212,16 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Web app: establish the session cookie.
     req.session.userId = user.id;
     req.session.username = user.username;
     req.session.role = user.role;
-    res.json({ id: user.id, username: user.username, fullName: user.full_name, role: user.role });
+    // Native app: also return a bearer token (stored client-side, sent as
+    // Authorization: Bearer / ?token= for cross-origin requests).
+    const token = JWT_SECRET
+      ? jwt.sign({ userId: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' })
+      : null;
+    res.json({ id: user.id, username: user.username, fullName: user.full_name, role: user.role, token });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -190,13 +235,13 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/me', (req, res) => {
-  if (!req.session.userId) {
+  if (!req.auth.userId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   res.json({
-    id: req.session.userId,
-    username: req.session.username,
-    role: req.session.role
+    id: req.auth.userId,
+    username: req.auth.username,
+    role: req.auth.role
   });
 });
 
@@ -226,7 +271,7 @@ app.post('/api/closures', requireAuth, async (req, res) => {
       INSERT INTO closures (name, notes, geom, created_by, pole_id, layer_id)
       VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7)
       RETURNING id, name, notes, pole_id, layer_id, ST_AsGeoJSON(geom) as geom
-    `, [name, notes || null, lng, lat, req.session.userId, pole_id || null, layerId || null]);
+    `, [name, notes || null, lng, lat, req.auth.userId, pole_id || null, layerId || null]);
     const row = result.rows[0];
     res.json({ ...row, geom: JSON.parse(row.geom) });
   } catch (err) {
@@ -285,13 +330,13 @@ app.post('/api/poles', requireAuth, async (req, res) => {
   try {
     const { name, notes, lat, lng, layer_id } = req.body;
     const layerId = layer_id || (await getDefaultLayerId());
-    const isPlan = req.session.role === 'planner' ? true : !!req.body.is_plan;
+    const isPlan = req.auth.role === 'planner' ? true : !!req.body.is_plan;
     const structureType = req.body.structure_type === 'pedestal' ? 'pedestal' : 'pole';
     const result = await pool.query(`
       INSERT INTO poles (name, notes, geom, created_by, layer_id, is_plan, structure_type)
       VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7, $8)
       RETURNING id, name, notes, layer_id, is_plan, structure_type, ST_AsGeoJSON(geom) as geom
-    `, [name, notes || null, lng, lat, req.session.userId, layerId || null, isPlan, structureType]);
+    `, [name, notes || null, lng, lat, req.auth.userId, layerId || null, isPlan, structureType]);
     const row = result.rows[0];
     res.json({ ...row, geom: JSON.parse(row.geom) });
   } catch (err) {
@@ -349,7 +394,7 @@ app.post('/api/routes', requireAuth, async (req, res) => {
   try {
     const { name, notes, points, fiber_count, color, attached_poles, attached_sites, layer_id } = req.body;
     const layerId = layer_id || (await getDefaultLayerId());
-    const isPlan = req.session.role === 'planner' ? true : !!req.body.is_plan;
+    const isPlan = req.auth.role === 'planner' ? true : !!req.body.is_plan;
     const buried = !!req.body.buried;
     // Plan routes have no fiber count — it's assigned when promoted to the live network.
     const fiberCount = isPlan ? null : (fiber_count || 12);
@@ -359,7 +404,7 @@ app.post('/api/routes', requireAuth, async (req, res) => {
       VALUES ($1, $2, ST_GeomFromText($3, 4326), $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id, name, notes, color, fiber_count, attached_poles, attached_sites, layer_id, is_plan, buried,
                 ST_Length(geom::geography) AS length_m, ST_AsGeoJSON(geom) as geom
-    `, [name, notes || null, wkt, req.session.userId, fiberCount, color || '#FF8800', attached_poles || [], attached_sites || [], layerId || null, isPlan, buried]);
+    `, [name, notes || null, wkt, req.auth.userId, fiberCount, color || '#FF8800', attached_poles || [], attached_sites || [], layerId || null, isPlan, buried]);
     const row = result.rows[0];
     res.json({ ...row, geom: JSON.parse(row.geom) });
   } catch (err) {
@@ -373,7 +418,7 @@ app.put('/api/routes/:id', requireAuth, async (req, res) => {
     const cur = await pool.query('SELECT is_plan FROM routes WHERE id=$1', [req.params.id]);
     if (!cur.rows.length) return res.status(404).json({ error: 'Not found' });
     const isPlanRoute = cur.rows[0].is_plan === true;
-    if (req.session.role === 'planner' && !isPlanRoute)
+    if (req.auth.role === 'planner' && !isPlanRoute)
       return res.status(403).json({ error: 'Plan-only account: cannot edit live objects' });
     const { name, notes, fiber_count, color, attached_poles, points } = req.body;
     // Plan routes keep a null fiber count (assigned on promote); live routes default to 12.
@@ -414,7 +459,7 @@ app.delete('/api/routes/:id', requireAuth, async (req, res) => {
 // ── Promote plan → live (admin / regular users only; planners cannot promote) ──
 app.post('/api/poles/:id/promote', requireAuth, async (req, res) => {
   try {
-    if (req.session.role === 'planner') return res.status(403).json({ error: 'Plan-only account cannot promote' });
+    if (req.auth.role === 'planner') return res.status(403).json({ error: 'Plan-only account cannot promote' });
     const result = await pool.query(
       'UPDATE poles SET is_plan=false WHERE id=$1 RETURNING id, name, notes, layer_id, is_plan, structure_type, ST_AsGeoJSON(geom) as geom',
       [req.params.id]
@@ -427,7 +472,7 @@ app.post('/api/poles/:id/promote', requireAuth, async (req, res) => {
 
 app.post('/api/routes/:id/promote', requireAuth, async (req, res) => {
   try {
-    if (req.session.role === 'planner') return res.status(403).json({ error: 'Plan-only account cannot promote' });
+    if (req.auth.role === 'planner') return res.status(403).json({ error: 'Plan-only account cannot promote' });
     // A fiber count is assigned at promotion time (plan routes have none).
     const fc = (Number.isInteger(req.body.fiber_count) && req.body.fiber_count > 0) ? req.body.fiber_count : 12;
     const result = await pool.query(
@@ -2257,7 +2302,7 @@ app.put('/api/field-values/:entityType/:entityId', requireAuth, async (req, res)
 
 app.get('/api/preferences', requireAuth, async (req, res) => {
   try {
-    const r = await pool.query('SELECT prefs FROM user_preferences WHERE user_id=$1', [req.session.userId]);
+    const r = await pool.query('SELECT prefs FROM user_preferences WHERE user_id=$1', [req.auth.userId]);
     res.json(r.rows[0]?.prefs ?? {});
   } catch (err) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -2267,7 +2312,7 @@ app.put('/api/preferences', requireAuth, async (req, res) => {
     await pool.query(
       `INSERT INTO user_preferences(user_id, prefs) VALUES($1,$2)
        ON CONFLICT(user_id) DO UPDATE SET prefs=$2`,
-      [req.session.userId, req.body]
+      [req.auth.userId, req.body]
     );
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: 'Server error' }); }
@@ -2310,7 +2355,7 @@ app.post('/api/users', requireAdmin, async (req, res) => {
 
 app.delete('/api/users/:id', requireAdmin, async (req, res) => {
   try {
-    if (parseInt(req.params.id) === req.session.userId) {
+    if (parseInt(req.params.id) === req.auth.userId) {
       return res.status(400).json({ error: 'Cannot delete yourself' });
     }
     await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
@@ -2330,7 +2375,7 @@ app.put('/api/users/:id/password', requireAdmin, async (req, res) => {
     const u = await pool.query('SELECT id, password_hash FROM users WHERE id = $1', [targetId]);
     if (!u.rows.length) return res.status(404).json({ error: 'User not found' });
     // Changing your own password requires verifying the current one.
-    if (targetId === req.session.userId) {
+    if (targetId === req.auth.userId) {
       const valid = current_password && await bcrypt.compare(current_password, u.rows[0].password_hash);
       if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
     }
@@ -2367,7 +2412,7 @@ app.post('/api/sites', requireAuth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO sites (name,notes,geom,site_type,created_by,layer_id) VALUES ($1,$2,ST_SetSRID(ST_MakePoint($3,$4),4326),$5,$6,$7)
        RETURNING id,name,site_type,notes,layer_id,ST_AsGeoJSON(geom) as geom`,
-      [name, notes||null, lng, lat, site_type, req.session.userId, layerId || null]
+      [name, notes||null, lng, lat, site_type, req.auth.userId, layerId || null]
     );
     res.json({ ...r.rows[0], geom: JSON.parse(r.rows[0].geom) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }

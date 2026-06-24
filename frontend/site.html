@@ -172,6 +172,7 @@
 </head>
 <body>
 <script>if(localStorage.getItem('ofm-dark-mode')==='true')document.body.classList.add('dark-mode');</script>
+<script src="api.js"></script>
 
 <div id="loading-screen">Loading site…</div>
 <div id="error-screen"><h2>Site not found</h2><p style="margin-top:8px;"><button onclick="goBackToMap()" style="background:none;border:none;cursor:pointer;color:#1565c0;font-size:14px;">← Back to map</button></p></div>
@@ -531,9 +532,9 @@ const collapsedSections = new Set();
 const siteId = parseInt(window.location.pathname.split('/').pop());
 
 async function apiFetch(method, path, body) {
-  const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } };
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
+  const r = await apiRequest(path, opts);
   if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || r.statusText); }
   return r.json();
 }
@@ -552,12 +553,12 @@ async function uploadPhoto(input, defId) {
   const fd = new FormData();
   fd.append('file', file);
   try {
-    const res = await fetch('/api/uploads', { method: 'POST', body: fd, credentials: 'include' });
+    const res = await apiRequest('/api/uploads', { method: 'POST', body: fd });
     const { url } = await res.json();
     const hidden = document.querySelector(`input[type=hidden][data-def="${defId}"]`);
     if (hidden) hidden.value = url;
     const img = document.getElementById('photo-preview-' + defId);
-    if (img) { img.src = url; img.style.display = 'block'; }
+    if (img) { img.src = apiUrl(url); img.style.display = 'block'; }
   } catch (e) { alert('Photo upload failed'); }
 }
 
@@ -576,9 +577,9 @@ function openPhotoLightbox(url) {
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closePhotoLightbox(); });
     document.body.appendChild(lb);
   }
-  lb.querySelector('#photo-lightbox-img').src = url;
+  lb.querySelector('#photo-lightbox-img').src = apiUrl(url);
   const dl = lb.querySelector('#photo-lightbox-dl');
-  dl.href = url;
+  dl.href = apiUrl(url);
   dl.download = url.split('/').pop();
   lb.style.display = 'flex';
 }
@@ -589,7 +590,7 @@ function closePhotoLightbox() {
 
 function entityPhotoThumbHtml(p) {
   return `<div id="ephoto-${p.id}" style="position:relative;display:inline-block;">
-    <img src="${esc(p.url)}" title="${esc(p.caption||'')}" onclick="openPhotoLightbox('${esc(p.url)}')" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;cursor:zoom-in;">
+    <img src="${esc(apiUrl(p.url))}" title="${esc(p.caption||'')}" onclick="openPhotoLightbox('${esc(p.url)}')" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid #ddd;cursor:zoom-in;">
     <button onclick="entityPhotoDelete(${p.id})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:18px;padding:0;text-align:center;">×</button>
   </div>`;
 }
@@ -611,7 +612,7 @@ async function entityPhotoUpload(input, entityType, entityId) {
     const fd = new FormData();
     fd.append('file', file);
     try {
-      const res = await fetch(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd, credentials: 'include' });
+      const res = await apiRequest(`/api/photos/${entityType}/${entityId}`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error(await res.text());
       const photo = await res.json();
       if (grid) grid.insertAdjacentHTML('beforeend', entityPhotoThumbHtml(photo));
@@ -625,19 +626,19 @@ async function init() {
   if (!siteId) { showError(); return; }
   try {
     const [siteRes, defsRes, valsRes, routesRes, panelsRes, connRes, equipRes, jumpRes, tmplRes, sfpRes, cardRes, devRes, optRes] = await Promise.all([
-      fetch('/api/sites/' + siteId, { credentials: 'include' }),
-      fetch('/api/field-defs', { credentials: 'include' }),
-      fetch('/api/field-values/site/' + siteId, { credentials: 'include' }),
-      fetch('/api/sites/' + siteId + '/routes', { credentials: 'include' }),
-      fetch('/api/sites/' + siteId + '/patch-panels', { credentials: 'include' }),
-      fetch('/api/connector-types', { credentials: 'include' }),
-      fetch('/api/sites/' + siteId + '/equipment', { credentials: 'include' }),
-      fetch('/api/sites/' + siteId + '/jumpers', { credentials: 'include' }),
-      fetch('/api/equipment-templates', { credentials: 'include' }),
-      fetch('/api/sfp-types', { credentials: 'include' }),
-      fetch('/api/card-types', { credentials: 'include' }),
-      fetch('/api/sites/' + siteId + '/devices', { credentials: 'include' }),
-      fetch('/api/sites/' + siteId + '/optical', { credentials: 'include' }),
+      apiRequest('/api/sites/' + siteId),
+      apiRequest('/api/field-defs'),
+      apiRequest('/api/field-values/site/' + siteId),
+      apiRequest('/api/sites/' + siteId + '/routes'),
+      apiRequest('/api/sites/' + siteId + '/patch-panels'),
+      apiRequest('/api/connector-types'),
+      apiRequest('/api/sites/' + siteId + '/equipment'),
+      apiRequest('/api/sites/' + siteId + '/jumpers'),
+      apiRequest('/api/equipment-templates'),
+      apiRequest('/api/sfp-types'),
+      apiRequest('/api/card-types'),
+      apiRequest('/api/sites/' + siteId + '/devices'),
+      apiRequest('/api/sites/' + siteId + '/optical'),
     ]);
     if (siteRes.status === 401) { window.location.href = '/'; return; }
     if (!siteRes.ok) { showError(); return; }
@@ -695,7 +696,7 @@ function render() {
   fieldDefs.forEach(d => {
     const val = fieldValues[d.id] || '';
     const display = d.field_type === 'photo' && val
-      ? `<img src="${esc(val)}" onclick="openPhotoLightbox('${esc(val)}')" style="max-width:120px;max-height:90px;border-radius:4px;cursor:zoom-in;">`
+      ? `<img src="${esc(apiUrl(val))}" onclick="openPhotoLightbox('${esc(val)}')" style="max-width:120px;max-height:90px;border-radius:4px;cursor:zoom-in;">`
       : (val ? esc(val) : '<em style="color:#aaa">—</em>');
     rows += `<div class="info-row">
       <span class="info-label">${esc(d.field_label)}</span>
@@ -1078,7 +1079,7 @@ async function openEditModal() {
         customHtml += `<select data-def="${d.id}" class="modal-input"><option value=""></option>${opts}</select>`;
       } else if (d.field_type === 'photo') {
         const preview = val
-          ? `<img id="photo-preview-${d.id}" src="${esc(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+          ? `<img id="photo-preview-${d.id}" src="${esc(apiUrl(val))}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
           : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
         customHtml += `${preview}<input type="hidden" data-def="${d.id}" value="${esc(val)}"><input type="file" accept="image/*" class="modal-input" onchange="uploadPhoto(this,'${d.id}')">`;
       } else {
@@ -1111,8 +1112,8 @@ async function saveEdit() {
   if (!name) return;
   const notes = document.getElementById('edit-notes').value.trim();
 
-  const r = await fetch('/api/sites/' + siteId, {
-    method: 'PUT', credentials: 'include',
+  const r = await apiRequest('/api/sites/' + siteId, {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, notes })
   });
@@ -1122,8 +1123,8 @@ async function saveEdit() {
   if (fieldDefs.length) {
     const values = {};
     document.querySelectorAll('[data-def]').forEach(el => { values[el.dataset.def] = el.value; });
-    const vr = await fetch('/api/field-values/site/' + siteId, {
-      method: 'PUT', credentials: 'include',
+    const vr = await apiRequest('/api/field-values/site/' + siteId, {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ values })
     });
@@ -1139,7 +1140,7 @@ async function saveEdit() {
 
 async function deleteSite() {
   if (!confirm(`Delete "${site.name}"? This cannot be undone.`)) return;
-  const r = await fetch('/api/sites/' + siteId, { method: 'DELETE', credentials: 'include' });
+  const r = await apiRequest('/api/sites/' + siteId, { method: 'DELETE' });
   if (r.ok) window.location.href = '/';
 }
 
@@ -1154,7 +1155,7 @@ async function openTraceModal(portId) {
   const footer = document.getElementById('trace-footer');
   body.innerHTML = '<div style="color:#888;">Tracing…</div>';
   footer.innerHTML = '';
-  const r = await fetch('/api/trace?port=' + portId, { credentials: 'include' });
+  const r = await apiRequest('/api/trace?port=' + portId);
   if (!r.ok) { body.innerHTML = '<div style="color:#c62828;">Trace failed.</div>'; return; }
   const t = await r.json();
 
@@ -1885,7 +1886,7 @@ async function openEqEditModal(equipId) {
         customHtml += `<select data-def="${d.id}" class="modal-input"><option value=""></option>${opts}</select>`;
       } else if (d.field_type === 'photo') {
         const preview = val
-          ? `<img id="photo-preview-${d.id}" src="${esc(val)}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
+          ? `<img id="photo-preview-${d.id}" src="${esc(apiUrl(val))}" style="max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;display:block;">`
           : `<img id="photo-preview-${d.id}" style="display:none;max-width:100%;max-height:160px;border-radius:4px;margin-bottom:4px;">`;
         customHtml += `${preview}<input type="hidden" data-def="${d.id}" value="${esc(val)}"><input type="file" accept="image/*" class="modal-input" onchange="uploadPhoto(this,'${d.id}')">`;
       } else {
